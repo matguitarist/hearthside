@@ -1,0 +1,56 @@
+#!/bin/bash
+# The 5.4.8 Mac client, made to run on current macOS and to log on to the home server:
+#
+#   mac-client-setup <World Of Warcraft-64.app> <game folder> <realm address>
+#
+# Copies the app into the game folder (it reads `Data/` beside itself), patches its connection
+# checks if they are not already (`mac-client-patch.py`), points its unused `libcrypto.0.9.8`
+# (removed from macOS; the game imports nothing from it) at `glhook.dylib`, our OpenGL fixes and FSR,
+# signs it ad hoc so Rosetta runs it, writes the realm list, and installs our addons. The binary is
+# Intel only: it needs Rosetta 2.
+set -euo pipefail
+here=$(cd "$(dirname "$0")" && pwd)
+src=$1 game=$2 realm=$3
+app="$game/World of Warcraft-64.app"
+bin="$app/Contents/MacOS/World of Warcraft-64"
+[ -d "$game/Data" ] || { echo "no Data folder in $game" >&2; exit 1; }
+
+# Set up again from the app already in place (the launcher's Prepare Again): from a copy of it.
+if [ -d "$app" ] && [ "$(cd "$src" && pwd -P)" = "$(cd "$app" && pwd -P)" ]; then
+    tmp=$(mktemp -d)
+    trap 'rm -rf "$tmp"' EXIT
+    ditto "$src" "$tmp/source.app"
+    src=$tmp/source.app
+fi
+rm -rf "$app"
+ditto "$src" "$app"
+find "$app" -name '._*' -delete
+python3 "$here/mac-client-patch.py" patch "$bin"
+rm -f "$bin.orig"
+
+hook=@executable_path/../Frameworks/glhook.dylib
+xcrun clang -arch x86_64 -dynamiclib -O2 -Wno-deprecated-declarations -framework OpenGL -framework CoreGraphics \
+    -lobjc "$here/glhook/glhook.c" "$here/glhook/fsr.c" -o "$app/Contents/Frameworks/glhook.dylib" -install_name "$hook"
+xcrun install_name_tool -change /usr/lib/libcrypto.0.9.8.dylib "$hook" "$bin" 2>/dev/null || true
+xcrun otool -L "$bin" | grep glhook.dylib >/dev/null || { echo "glhook.dylib is not loaded by $bin" >&2; exit 1; }
+codesign --force --deep --sign - "$app"
+xattr -dr com.apple.quarantine "$app" 2>/dev/null || true
+
+mkdir -p "$game/WTF"
+cfg="$game/WTF/Config.wtf"
+touch "$cfg"
+sed -i '' -e '/^SET realmlist /d' -e '/^SET patchlist /d' "$cfg"
+printf 'SET realmlist "%s"\nSET patchlist "%s"\n' "$realm" "$realm" >> "$cfg"
+# A maximized window at the screen's size in points: without gxResolution the client picks a bogus
+# mode from its list (6016x3384 and up) and draws its text for that, a quarter size.
+if ! grep -q '^SET gxResolution ' "$cfg"; then
+    size=$(system_profiler SPDisplaysDataType | sed -n 's/.*UI Looks like: \([0-9]*\) x \([0-9]*\).*/\1x\2/p' | head -1)
+    printf 'SET gxWindow "1"\nSET gxMaximize "1"\nSET gxResolution "%s"\n' "${size:-1600x900}" >> "$cfg"
+fi
+# Our addons, written for this client (`addons/`): AzerothPlus and AzerothAdmin.
+for addon in "$here"/addons/*/; do
+    name=$(basename "$addon")
+    rm -rf "$game/Interface/AddOns/$name"
+    ditto "$addon" "$game/Interface/AddOns/$name"
+done
+echo "ready: $app"

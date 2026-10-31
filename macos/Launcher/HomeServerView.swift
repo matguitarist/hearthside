@@ -57,7 +57,7 @@ struct HomeServerPanel: View {
                     .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: 10) {
                     Button("Try Again") { Task { await home.refresh() } }
-                    Button("Show Log") { showLogs(home.isSetUp ? .homeServer : .homeSetup, openWindow) }
+                    Button("Show Log…") { showLogs(home.isSetUp ? .homeServer : .homeSetup, openWindow) }
                 }
             }
         }
@@ -232,7 +232,7 @@ struct HomeServerSettings: View {
                             Button("Open Dashboard") { NSWorkspace.shared.open(url) }
                                 .help("The server's page at \(url.absoluteString), for any browser at home")
                         }
-                        Button("Show Logs") { showLogs(.homeServer, openWindow) }
+                        Button("Show Logs…") { showLogs(.homeServer, openWindow) }
                     }
                     .disabled(home.isBusy)
                 } else if home.phase == .notSetUp {
@@ -398,6 +398,19 @@ struct HomeGameSettings: View {
             }
 
             Section {
+                Toggle("Bot sells and buys at the auction house", isOn: $draft.ahEnabled)
+                step("Prices", $draft.ahPrices, HomeServer.Settings.ahPriceSteps)
+                    .disabled(!draft.ahEnabled)
+                step("Stock", $draft.ahStock, HomeServer.Settings.ahStockSteps)
+                    .disabled(!draft.ahEnabled)
+            } header: {
+                Text("Auction house")
+            } footer: {
+                Text("Prices are times each item's vendor value; ×0.35 is the server's default. Stock ×1 is about 5,000 auctions across every category. The bot checks the auction house every 15 minutes.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
+            Section {
                 HStack {
                     Text(draft == home.settings
                          ? "These are the server's settings."
@@ -418,10 +431,14 @@ struct HomeGameSettings: View {
     }
 
     private func rate(_ title: String, _ value: Binding<Double>) -> some View {
+        step(title, value, HomeServer.Settings.rates)
+    }
+
+    private func step(_ title: String, _ value: Binding<Double>, _ steps: [Double]) -> some View {
         Picker(title, selection: value) {
             // A value set by hand on the server stays selectable.
-            ForEach(Array(Set(HomeServer.Settings.rates + [value.wrappedValue])).sorted(), id: \.self) { r in
-                Text("×\(r.formatted(.number.precision(.fractionLength(0...1))))").tag(r)
+            ForEach(Array(Set(steps + [value.wrappedValue])).sorted(), id: \.self) { r in
+                Text("×\(r.formatted(.number.precision(.fractionLength(0...2))))").tag(r)
             }
         }
     }

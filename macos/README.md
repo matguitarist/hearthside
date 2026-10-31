@@ -1,20 +1,22 @@
 # The macOS app
 
-`Azeroth Survivors.app` is a small Swift launcher with the game beside it:
+`Hearthside.app` (called Azeroth Survivors up to 0.7.3) is a small Swift launcher with the game
+beside it, for Survivors, Classic 1.12 and Mists of Pandaria 5.4.8:
 
 ```
-Azeroth Survivors.app/Contents/
-  MacOS/AzerothSurvivors      the launcher (macos/Launcher/*.swift)
+Hearthside.app/Contents/
+  MacOS/Hearthside           the launcher (macos/Launcher/*.swift)
   MacOS/warcraft-survivors    the game: a player build (--no-default-features), ship profile
   Frameworks/Sparkle.framework
   Resources/                  icon, key art, data-manifest.tsv
-  Resources/Server/           the local server's compose.yaml and configs (macos/Server)
+  Resources/Server/           the local server's compose.yaml and configs (macos/Server),
+                              the CMaNGOS and Pandaria recipes, Pandaria's 5.4.8 addons
   Resources/AddOns/           Classic's shipped addons (addons/), copied into benilla-config/AddOns
 ```
 
 The launcher:
 
-- **Downloads the game data** on first run into `~/Library/Application Support/Azeroth Survivors/Data`.
+- **Downloads the game data** on first run into `~/Library/Application Support/Hearthside/Data`.
   No Blizzard files ship in the app. It reads the archive.org zip's directory over HTTP Range
   requests and fetches each MPQ's own byte range, three at a time (archive.org paces each
   connection), so every file resumes on its own and only a missing or damaged file is fetched
@@ -31,7 +33,7 @@ The launcher:
 - **Runs the server on this Mac** in Docker (OrbStack or Docker Desktop), from
   [vmangos-deploy](https://github.com/mserajnik/vmangos-deploy)'s prebuilt images
   (`LocalServer.swift`). Setup copies `macos/Server` (CC0, from that project's examples) to
-  `Application Support/Azeroth Survivors/Server`, pulls the images (about 1 GB), reads the terrain
+  `Application Support/Hearthside/Server`, pulls the images (about 1 GB), reads the terrain
   and DBCs from the game's own Data folder in seconds, and builds the world database (about
   2.5 minutes in all). That quick data plays without line of sight or pathing. Settings › Server
   runs the full extraction in the background (hours); the next start swaps it in, and rolls back
@@ -40,13 +42,13 @@ The launcher:
   launcher feeds the SQL to the database container. The server starts as the launcher opens in
   that mode (each start takes about a minute: vmangos-deploy checks its migrations), and stops when
   the game or the launcher quits unless Settings keeps it. Ports bind to 127.0.0.1. Commands and
-  their output go to `~/Library/Logs/Azeroth Survivors/server.log`, never stdin.
+  their output go to `~/Library/Logs/Hearthside/server.log`, never stdin.
 - **Or CMaNGOS with bots** (the Server picker): [CMaNGOS Classic](https://github.com/cmangos/mangos-classic)
   with the [playerbots](https://github.com/cmangos/playerbots) module and
   [classic-db](https://github.com/cmangos/classic-db), built on the Mac at setup from
   `macos/Server/CMaNGOS/Dockerfile` (no arm64 images exist, and playerbots has no license, so the
   app ships the recipe, not a binary): about 25 minutes with the maps, each source pinned to a tested commit.
-  It lives in `Application Support/Azeroth Survivors/Server-CMaNGOS` (project
+  It lives in `Application Support/Hearthside/Server-CMaNGOS` (project
   `azeroth-survivors-cmangos`), with its own databases and accounts, on the same ports, so starting
   one stops the other. The image carries its configs: anticheat off (with it on, CMaNGOS arms
   Warden for every session, whatever `Warden.Enable` says), 100 random bots. The bots cannot run
@@ -73,15 +75,20 @@ The launcher:
   with the machine, kept running when the game quits. Accounts are the same `--account-sql` and
   SQL, fed to `docker exec` of its database. Settings › Bots & Rates rewrites
   `.env` keys (`BOTS`, `BOTS_NEAR_PLAYERS`, `BOTS_SYNC_LEVEL`, `RATE_XP`, `RATE_LOOT`, `RATE_GOLD`,
-  `RATE_REPUTATION`, `RATE_REST`) that `compose.yaml` passes on as CMaNGOS (`Mangosd_`) and
-  playerbots (`PlayerBots_`) settings, then recreate `mangosd`; bringing bots to players also
+  `RATE_REPUTATION`, `RATE_REST`, and the auction house bot's `AH_ENABLED`, `AH_PRICES`, `AH_STOCK`)
+  that `compose.yaml` passes on as CMaNGOS (`Mangosd_`), playerbots (`PlayerBots_`) and AhBot
+  (`AHBot_`) settings, the stock by scaling every `AhBot.MaxAuctionCount` in `ahbot.conf` from its
+  pristine copy as `mangosd` starts, then recreate `mangosd`; bringing bots to players also
   shortens how often they move on (`BOTS_MOVE_MIN`, `BOTS_MOVE_MAX`). The launcher keeps the
   server's scripts and compose files current on each look. `home-status` writes the server's state
-  (players, bots by level, CPU and memory, backups, software, settings, the latest real errors)
+  (players, bots by level and where they are, auctions, CPU and memory, backups, software,
+  settings, the latest real errors)
   into `storage/dashboard/` every minute from cron, with a day of history, and the `dashboard`
   container (`nginx`, read-only, no Docker socket or database password) serves it with
   `dashboard.html` at `http://<LAN_IP>:8095` for any browser at home; it stays up while the game is
-  stopped. Settings › Home Server shows the same live, with Open Dashboard. Nothing is forwarded to the internet. `home-backup` dumps the accounts and characters
+  stopped; its world map shows every bot and player on the two continents, over map pictures the
+  launcher draws from this Mac's game files (`warcraft-survivors --world-maps`) and copies over,
+  as none ship in the repository. Settings › Home Server shows the same live, with Open Dashboard. Nothing is forwarded to the internet. `home-backup` dumps the accounts and characters
   nightly at 4:30 (a dynamix cron file on Unraid, else root's crontab; to
   `/mnt/user/backups/azeroth-survivors-cmangos`, else `backups/`, 14 kept), and Settings › Backups & Updates backs up and restores on demand, a restore saving the state
   it replaces first. `home-update check` compares the commits the image was built from (`.refs`,
@@ -91,6 +98,23 @@ The launcher:
   maps only when their format moved, and on any failure puts back the old image, world, maps and
   backup. It refuses a core whose terrain or line-of-sight format moved, which vmangos's extractor
   cannot follow.
+- **Plays Pandaria** (the third mode; `Pandaria.swift`, `PandariaView.swift`, Settings › Pandaria):
+  Mists of Pandaria 5.4.8 with bots, from
+  [LoA-Pandaria-Playerbots](https://github.com/1LineAtaTime/LoA-Pandaria-Playerbots) (TrinityCore),
+  on the home server beside CMaNGOS in `azeroth-survivors-pandaria` (project of the same name), on
+  the same ports, so starting one stops the other. It plays with the player's own World of
+  Warcraft 5.4.8 for Mac (its folder chosen in the launcher; nothing of it ships). Set Up rsyncs
+  `macos/Server/Pandaria` and the client's `Data` (about 23 GB) there, writes `LAN_IP` and
+  `CLIENT_DATA` to `.env`, and starts `home-setup` detached, as for CMaNGOS: the image built from
+  source (a few hours), `install`, the maps read from the client, then the servers, each step
+  skipped once done. Accounts are SQL fed to `docker exec` of its database:
+  `sha_pass_hash` = SHA1(`NAME:PASSWORD`) uppercased, computed on the Mac (`v`, `s` cleared on a
+  new password), administrators `account_access` gmlevel 3 on every realm (-1); the `RNDBOT`
+  accounts are left out and counted as bots online. The first Play prepares the client with
+  `mac-client-setup` (the connection patches of `mac-client-patch.py`, `glhook.dylib` with the
+  OpenGL fixes and FSR in place of the removed `libcrypto.0.9.8`, an ad hoc signature, the
+  realmlist, the addons); it runs under Rosetta and needs the command line developer tools. Later
+  Plays only write the realmlist and the addons. Its logs (`storage/logs`) are in the Logs window.
 - **Installs AzerothPlus and AzerothAdmin** for Classic (`Addons.swift`, Settings › General):
   before each Classic launch the shipped addons replace their folders in `benilla-config/AddOns`,
   so the app's version is the one that runs; other addons there are untouched, and saved settings
@@ -99,23 +123,26 @@ The launcher:
   objectives" tracker, a windowed map with the zone's quests, quest markers on the map and minimap
   (`questmap.lua`; its places, `questdb.lua`, come from the CMaNGOS world database through
   `scripts/questdb-dump.sh` and `scripts/questdb.py`), minimap coordinates and movable buff icons,
-  each a box in its options. AzerothAdmin sends vmangos GM commands, respelled for CMaNGOS
+  quest levels in the log and automatic quest accept and hand-in, vendor prices, health numbers and
+  quest progress in tooltips (`infodb.lua`, from the same dump through `scripts/infodb.py`), grey
+  selling, auto-repair, a bag search box and a bot party panel (`/ap bots`), each a box on a tab of
+  its options; `scripts/addon-tests/` runs them against a stubbed client. AzerothAdmin sends vmangos GM commands, respelled for CMaNGOS
   (`AA.CMANGOS`, with its own Bots page), so it needs an administrator account (`gmlevel` 6 on
   vmangos, 3 on CMaNGOS, set per account in Settings › Server; new accounts default to it). The shipped `mangosd.conf` starts a GM as a player (`GM.LoginState = 0`,
   `GM.Visible = 1`, `GM.CheatGod = 0`); `migrateConf` applies that once to older copies
   (`config/.version`).
 - **Updates itself** with [Sparkle](https://sparkle-project.org) from the feed at
   `https://github.com/<repo>/releases/latest/download/appcast.xml`.
-- Logs the game to `~/Library/Logs/Azeroth Survivors/game.log` and shows its tail on a crash. The Logs window (Game › Show Logs, ⌘L; `LogViewer.swift`) reads it, the server on this Mac and the home server's logs (over SSH), with levels, search, the most frequent problems and live following.
+- Logs the game to `~/Library/Logs/Hearthside/game.log` and shows its tail on a crash. The Logs window (Game › Show Logs, ⌘L; `LogViewer.swift`) reads it, the server on this Mac and the home server's logs (over SSH), with levels, search, the most frequent problems and live following.
 - **Notices a stuck start:** if the game hasn't opened its window after 25 s (in practice an audio
   driver not answering, such as a remote-desktop one), the launcher comes back with Keep Waiting
   and Force Quit, and steps aside again by itself if the window appears.
-  `defaults write io.github.matguitarist.azeroth-survivors stuckAfter -float 3` shortens the wait for testing.
+  `defaults write io.github.matguitarist.hearthside stuckAfter -float 3` shortens the wait for testing.
 
 ## Building
 
 ```bash
-make app            # → target/macos/Azeroth Survivors.app, signed with your Developer ID
+make app            # → target/macos/Hearthside.app, signed with your Developer ID
 make release-mac    # also notarize + staple, and write target/macos/dist/{zip,dmg,appcast.xml}
 ```
 

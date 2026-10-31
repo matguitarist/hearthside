@@ -9,6 +9,9 @@
 /web/dist/
 
 # --- Blizzard-owned content: NEVER commit ---
+# The launcher's Classic and Pandaria key art (`macos/art/*.heic`), Blizzard's: kept on this Mac,
+# put in the app by `scripts/macos-app.sh` when present.
+/macos/art/
 # The user's legally-installed 1.12.1 client. Read at runtime; not redistributed.
 /WoW
 # Fetched by scripts/fetch-data.sh (archive.org) — the client's Data folder, not redistributed.

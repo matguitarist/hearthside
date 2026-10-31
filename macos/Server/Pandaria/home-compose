@@ -1,0 +1,35 @@
+#!/bin/bash
+# `docker compose` for the Pandaria server's folder on a home server, as `../CMaNGOS/home-compose`
+# is for the CMaNGOS one: the server's own, or the docker:cli image's where it has none (Unraid).
+# The launcher runs everything through it.
+set -euo pipefail
+cd "$(dirname "$0")"
+p=azeroth-survivors-pandaria
+f=(-p "$p" -f compose.yaml)
+d=$PWD
+if docker compose version >/dev/null 2>&1; then
+    docker compose "${f[@]}" "$@"
+else
+    docker run --rm -i -v /var/run/docker.sock:/var/run/docker.sock -v "$d:$d" -w "$d" docker:29-cli \
+        docker compose "${f[@]}" "$@"
+fi
+
+# Unraid's autostart list, kept as the CMaNGOS server keeps it: an `up` puts the containers it
+# names on it (the database first, with time to open), a `stop` or `down` takes them off, so a
+# server stopped from the launcher stays stopped after a reboot.
+list=/var/lib/docker/unraid-autostart
+if [[ -f $list ]]; then
+    case " $* " in
+    " up "*)
+        named=" $(printf '%s ' "$@" | sed -e 's/^up //' -e 's/-[^ ]* //g') "
+        for c in "$p-database-1 10" "$p-authserver-1" "$p-worldserver-1"; do
+            s=${c#"$p-"}; s=${s%%-1*}
+            [[ $named == "  " || $named == *" $s "* ]] || continue
+            grep -q "^${c%% *}\( \|$\)" "$list" || echo "$c" >>"$list"
+        done
+        ;;
+    *" stop "* | *" down "*)
+        sed -i "/^$p-/d" "$list"
+        ;;
+    esac
+fi

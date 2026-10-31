@@ -52,7 +52,7 @@ struct LocalServerPanel: View {
                     .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: 10) {
                     Button("Try Again") { Task { await server.refresh() } }
-                    Button("Show Log") { showLogs(.localCommands, openWindow) }
+                    Button("Show Log…") { showLogs(.localCommands, openWindow) }
                 }
             }
         }
@@ -112,6 +112,7 @@ struct AccountForm: View {
     let action: String
     var name: String? = nil
     var home = false
+    var pandaria = false
     var done: (() -> Void)? = nil
 
     @State private var typed = ""
@@ -157,9 +158,12 @@ struct AccountForm: View {
         guard !account.isEmpty, !password.isEmpty, !working else { return }
         working = true
         Task {
-            error = home
-                ? await homeServer.account(account, password: password, changePassword: name != nil, admin: admin)
-                : await server.account(account, password: password, changePassword: name != nil, admin: admin)
+            let change = name != nil
+            error = pandaria
+                ? await PandariaServer.shared.account(account, password: password, changePassword: change, admin: admin)
+                : home
+                ? await homeServer.account(account, password: password, changePassword: change, admin: admin)
+                : await server.account(account, password: password, changePassword: change, admin: admin)
             working = false
             if error == nil {
                 password = ""
@@ -201,7 +205,7 @@ struct ServerSettings: View {
                         }
                         Spacer()
                         Button("Show Server Folder") { reveal(LocalServer.dir) }
-                        Button("Show Logs") { showLogs(.localServer, openWindow) }
+                        Button("Show Logs…") { showLogs(.localServer, openWindow) }
                     }
                     .disabled(server.isBusy)
                     Toggle(isOn: $keepServer) {

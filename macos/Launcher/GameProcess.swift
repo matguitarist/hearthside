@@ -1,7 +1,8 @@
 import AppKit
 import Foundation
 
-/// Runs the game binary with its data and settings folders, and tracks it until it quits.
+/// Runs the game binary with its data and settings folders, or for Pandaria the player's 5.4.8
+/// client in its own folder, and tracks it until it quits. Either writes to `game.log`.
 @MainActor
 final class GameProcess: ObservableObject {
     @Published private(set) var running = false
@@ -44,14 +45,23 @@ final class GameProcess: ObservableObject {
             let log = try FileHandle(forWritingTo: Paths.gameLog)
 
             let p = Process()
-            p.executableURL = Paths.gameBinary
-            p.currentDirectoryURL = Paths.support
-            if GameMode.current == .classic { p.arguments = ["--classic"] }
-            var env = ProcessInfo.processInfo.environment
-            env["WOW_DATA"] = Paths.data.path
-            env["BENILLA_HOME"] = Paths.gameConfig.path
-            env["NO_COLOR"] = "1" // a readable log file, not ANSI escapes
-            p.environment = env
+            let pandaria = GameMode.current == .pandaria
+            if pandaria {
+                guard let binary = PandariaClient.binary, let folder = PandariaClient.folder else {
+                    throw ServerError(PandariaClient.problem ?? "Choose your World of Warcraft 5.4.8 folder.")
+                }
+                p.executableURL = binary
+                p.currentDirectoryURL = folder
+            } else {
+                p.executableURL = Paths.gameBinary
+                p.currentDirectoryURL = Paths.support
+                if GameMode.current == .classic { p.arguments = ["--classic"] }
+                var env = ProcessInfo.processInfo.environment
+                env["WOW_DATA"] = Paths.data.path
+                env["BENILLA_HOME"] = Paths.gameConfig.path
+                env["NO_COLOR"] = "1" // a readable log file, not ANSI escapes
+                p.environment = env
+            }
             p.standardOutput = log
             p.standardError = log
             let started = Date()
@@ -67,9 +77,10 @@ final class GameProcess: ObservableObject {
             process = p
             running = true
             killedByUser = false
-            watch(for: Self.stuckAfter)
+            // The 5.4.8 client logs nothing of its window to wait for.
+            if !pandaria { watch(for: Self.stuckAfter) }
         } catch {
-            crash = Crash(message: "The game could not start: \(error.localizedDescription)", logTail: "")
+            crash = Crash(message: "The game could not start: \(LocalServer.message(error))", logTail: "")
         }
     }
 

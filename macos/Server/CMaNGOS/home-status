@@ -23,7 +23,7 @@ sql() { docker exec "$p-database-1" mariadb -umangos -pmangos -N -B -e "$1" 2>/d
 noise='AbstractPathMovementGenerator::Initialize Path empty|is not moving but have spline movement enabled|try to add and already existing cooldown|CastSpell: unknown spell id 0 |Cannot teleport bot .* - no locations available'
 
 now() {
-    local realmd mangosd database since cpu=0 mem=0 dbmem=0 players="" bots=0 brackets="" errors="" backups="" nplayers=0
+    local realmd mangosd database since cpu=0 mem=0 dbmem=0 players="" bots=0 brackets="" errors="" backups="" auctions=0 dots="" nplayers=0
     realmd=$(health realmd) mangosd=$(health mangosd) database=$(health database)
     since=$(docker inspect -f '{{.State.StartedAt}}' "$p-mangosd-1" 2>/dev/null || true)
     # `49.15%|5.419GiB / 22.92GiB`, in bytes.
@@ -36,16 +36,22 @@ now() {
     done < <(docker stats --no-stream --format '{{.Name}}|{{.CPUPerc}}|{{.MemUsage}}' "$p-mangosd-1" "$p-database-1" 2>/dev/null || true)
 
     if [ "$database" = healthy ]; then
-        while IFS=$'\t' read -r name level race class; do
+        while IFS=$'\t' read -r name level race class map x y; do
             [ -n "$name" ] || continue
             nplayers=$((nplayers + 1))
-            players+="${players:+,}{\"name\":$(js "$name"),\"level\":$level,\"race\":$race,\"class\":$class}"
-        done < <(sql "SELECT c.name, c.level, c.race, c.class FROM classiccharacters.characters c JOIN classicrealmd.account a ON a.id = c.account WHERE c.online = 1 AND a.username NOT LIKE 'RNDBOT%' ORDER BY c.level DESC, c.name")
+            players+="${players:+,}{\"name\":$(js "$name"),\"level\":$level,\"race\":$race,\"class\":$class,\"map\":$map,\"x\":$x,\"y\":$y}"
+        done < <(sql "SELECT c.name, c.level, c.race, c.class, c.map, ROUND(c.position_x), ROUND(c.position_y) FROM classiccharacters.characters c JOIN classicrealmd.account a ON a.id = c.account WHERE c.online = 1 AND a.username NOT LIKE 'RNDBOT%' ORDER BY c.level DESC, c.name")
         while IFS=$'\t' read -r bracket n; do
             [ -n "$bracket" ] || continue
             brackets+="${brackets:+,}{\"from\":$bracket,\"count\":$n}"
             bots=$((bots + n))
         done < <(sql "SELECT FLOOR((c.level - 1) / 10) * 10 + 1, COUNT(*) FROM classiccharacters.characters c JOIN classicrealmd.account a ON a.id = c.account WHERE c.online = 1 AND a.username LIKE 'RNDBOT%' GROUP BY 1 ORDER BY 1")
+        # Where the bots are, for the dashboard's map: [map, x, y, level] each, on the two continents.
+        while IFS=$'\t' read -r map x y level; do
+            [ -n "$map" ] || continue
+            dots+="${dots:+,}[$map,$x,$y,$level]"
+        done < <(sql "SELECT c.map, ROUND(c.position_x), ROUND(c.position_y), c.level FROM classiccharacters.characters c JOIN classicrealmd.account a ON a.id = c.account WHERE c.online = 1 AND a.username LIKE 'RNDBOT%' AND c.map IN (0, 1)")
+        auctions=$(sql "SELECT COUNT(*) FROM classiccharacters.auction" || echo 0)
     fi
 
     local log=storage/mangosd/logs/Server.log
@@ -68,7 +74,7 @@ now() {
     done
     local updated settings=""
     updated=$(sed -n 's/^UPDATED=//p' .refs 2>/dev/null || true)
-    for key in BOTS BOTS_NEAR_PLAYERS BOTS_SYNC_LEVEL RATE_XP RATE_LOOT RATE_GOLD RATE_REPUTATION RATE_REST; do
+    for key in BOTS BOTS_NEAR_PLAYERS BOTS_SYNC_LEVEL RATE_XP RATE_LOOT RATE_GOLD RATE_REPUTATION RATE_REST AH_ENABLED AH_PRICES AH_STOCK; do
         value=$(sed -n "s/^$key=//p" .env 2>/dev/null || true)
         [ -z "$value" ] || settings+="${settings:+,}$(js "$key"):$(js "$value")"
     done
@@ -82,7 +88,7 @@ now() {
 {"updated":$(date +%s),"address":$(js "$(sed -n 's/^LAN_IP=//p' .env 2>/dev/null || true)"),
 "services":{"realmd":$(js "$realmd"),"mangosd":$(js "$mangosd"),"database":$(js "$database")},
 "since":$(js "$since"),
-"players":[${players}],"bots":$bots,"botLevels":[${brackets}],
+"players":[${players}],"bots":$bots,"botLevels":[${brackets}],"botPositions":[${dots}],"auctions":${auctions:-0},
 "machine":{"cores":$cores,"load":$load,"memory":$total,"available":$available},
 "game":{"cpu":$cpu,"memory":$mem},"databaseMemory":$dbmem,
 "backups":[${backups}],"software":{${refs}},"updated_software":$(js "$updated"),

@@ -166,6 +166,7 @@ def main():
     out.write("-- zones: name = {map, left, right, top, bottom} in world yards (`WorldMapArea.dbc`).\n")
     out.write("-- units, objects: their spawns clustered, \"map x y map x y ...\".\n")
     out.write("-- quests: title = {{level, races, {{objective, {units}, {objects}}, ...}, {enders}, {ender objects}}, ...}.\n")
+    out.write("-- names: unit id = its name, for the tooltips' quest lines.\n")
     out.write("AzerothPlusQuestDB = {\nzones = {\n")
     for name, bounds in sorted(zones.items()):
         out.write(f"{name} = {lua_list(bounds)},\n")
@@ -174,6 +175,9 @@ def main():
         for entry in sorted(used[key]):
             points = " ".join(f"{m} {x} {y}" for m, x, y in cluster(spawns[key][entry]))
             out.write(f'[{entry}] = "{points}",\n')
+    out.write("},\nnames = {\n")
+    for entry in sorted(used["c"]):
+        out.write(f"[{entry}] = {lua_string(creature_name.get(entry, ''))},\n")
     out.write("},\nquests = {\n")
     for title in sorted(quests):
         variants = []

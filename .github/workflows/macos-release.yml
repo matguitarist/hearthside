@@ -133,7 +133,7 @@ jobs:
         run: |
           if ! gh release view "$TAG" >/dev/null 2>&1; then
             if [ -f target/macos/release-notes.md ]; then notes=(--notes-file target/macos/release-notes.md); else notes=(--generate-notes); fi
-            gh release create "$TAG" --title "Azeroth Survivors ${TAG#v}" "${notes[@]}"
+            gh release create "$TAG" --title "Hearthside ${TAG#v}" "${notes[@]}"
           fi
           gh release upload "$TAG" target/macos/dist/* --clobber
 

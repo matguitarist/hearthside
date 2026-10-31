@@ -1,0 +1,4 @@
+# Only the recipe goes to the build: never the client, the extracted data or the logs.
+*
+!Dockerfile
+!pandaria-install

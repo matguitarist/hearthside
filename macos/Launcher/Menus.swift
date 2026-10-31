@@ -10,6 +10,7 @@ struct LauncherCommands: Commands {
     @ObservedObject var updater: Updater
     @ObservedObject var server: LocalServer
     @ObservedObject var home: HomeServer
+    @ObservedObject var pandaria: PandariaServer
     @AppStorage(Prefs.modeKey) private var mode: GameMode = .survivors
     @AppStorage(Prefs.classicServerKey) private var classicServer: ClassicServer = .local
     @AppStorage("settingsPane") private var settingsPane = SettingsPane.general
@@ -75,8 +76,20 @@ struct LauncherCommands: Commands {
                 Button("Bots & Rates…") { settings(.homeGame) }
                 Button("Backups & Updates…") { settings(.homeMaintenance) }
             }
+            Section("Pandaria") {
+                if pandaria.phase == .running {
+                    Button("Stop Pandaria") { Task { await pandaria.stop() } }
+                        .disabled(pandaria.isBusy || game.running)
+                    Button("Restart Pandaria") { Task { await pandaria.restart() } }
+                        .disabled(pandaria.isBusy || game.running)
+                } else {
+                    Button("Start Pandaria") { Task { await pandaria.start() } }
+                        .disabled(!pandaria.isSetUp || pandaria.isBusy)
+                }
+                Button("Pandaria Settings…") { settings(.pandaria) }
+            }
             Divider()
-            Button("Server Logs") { showLogs(mode == .classic && classicServer == .home ? .homeServer : .localServer, openWindow) }
+            Button("Server Logs…") { showLogs(serverLog, openWindow) }
         }
 
         CommandGroup(before: .windowList) {
@@ -101,6 +114,15 @@ struct LauncherCommands: Commands {
         }
     }
 
+    /// The log of the server the current mode plays on.
+    private var serverLog: LogSource {
+        switch mode {
+        case .pandaria: .pandariaWorld
+        case .classic where classicServer == .home: .homeServer
+        default: .localServer
+        }
+    }
+
     private func settings(_ pane: SettingsPane) {
         settingsPane = pane
         openSettings()
@@ -117,7 +139,7 @@ enum Links {
     static let project: URL = {
         let feed = Bundle.main.infoDictionary?["SUFeedURL"] as? String ?? ""
         let repo = feed.components(separatedBy: "/releases/").first ?? ""
-        return URL(string: repo.hasPrefix("https://github.com/") ? repo : "https://github.com/matguitarist/azeroth-survivors-re")!
+        return URL(string: repo.hasPrefix("https://github.com/") ? repo : "https://github.com/matguitarist/hearthside")!
     }()
     static var releases: URL { project.appendingPathComponent("releases") }
     static var newIssue: URL { project.appendingPathComponent("issues/new") }

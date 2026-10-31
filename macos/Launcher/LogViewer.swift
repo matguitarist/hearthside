@@ -58,6 +58,7 @@ struct LogEntry: Identifiable, Sendable {
 enum LogSource: String, CaseIterable, Identifiable, Hashable {
     case game, gamePrevious, localServer, localCommands
     case homeServer, homeRealm, homeDatabase, homeSetup, homeUpdate
+    case pandariaWorld, pandariaLogin, pandariaDatabase, pandariaSetup
 
     var id: String { rawValue }
 
@@ -72,17 +73,21 @@ enum LogSource: String, CaseIterable, Identifiable, Hashable {
         case .homeDatabase: "World database errors"
         case .homeSetup: "Setup"
         case .homeUpdate: "Updates"
+        case .pandariaWorld: "Game server"
+        case .pandariaLogin: "Login server"
+        case .pandariaDatabase: "Database errors"
+        case .pandariaSetup: "Setup"
         }
     }
 
     var symbol: String {
         switch self {
         case .game, .gamePrevious: "gamecontroller"
-        case .localServer, .homeServer: "server.rack"
+        case .localServer, .homeServer, .pandariaWorld: "server.rack"
         case .localCommands: "terminal"
-        case .homeRealm: "person.badge.key"
-        case .homeDatabase: "cylinder.split.1x2"
-        case .homeSetup: "hammer"
+        case .homeRealm, .pandariaLogin: "person.badge.key"
+        case .homeDatabase, .pandariaDatabase: "cylinder.split.1x2"
+        case .homeSetup, .pandariaSetup: "hammer"
         case .homeUpdate: "arrow.triangle.2.circlepath"
         }
     }
@@ -91,11 +96,12 @@ enum LogSource: String, CaseIterable, Identifiable, Hashable {
         switch self {
         case .game, .gamePrevious: "Game"
         case .localServer, .localCommands: "Server on this Mac"
+        case .pandariaWorld, .pandariaLogin, .pandariaDatabase, .pandariaSetup: "Pandaria"
         default: "Home server"
         }
     }
 
-    var isHome: Bool { group == "Home server" }
+    var isHome: Bool { group == "Home server" || group == "Pandaria" }
 
     /// What reading it is about, under its title.
     var subtitle: String {
@@ -109,6 +115,10 @@ enum LogSource: String, CaseIterable, Identifiable, Hashable {
         case .homeDatabase: "DBErrors.log"
         case .homeSetup: "setup.log"
         case .homeUpdate: "update.log"
+        case .pandariaWorld: "Server.log"
+        case .pandariaLogin: "Auth.log"
+        case .pandariaDatabase: "DBErrors.log"
+        case .pandariaSetup: "setup.log"
         }
     }
 
@@ -135,7 +145,7 @@ enum LogSource: String, CaseIterable, Identifiable, Hashable {
         }
     }
 
-    static let groups = ["Game", "Server on this Mac", "Home server"]
+    static let groups = ["Game", "Server on this Mac", "Home server", "Pandaria"]
 }
 
 /// Which log the window shows; set before opening it to go straight to one.
@@ -175,6 +185,7 @@ enum LogReader {
             return try await Task.detached { try tail(file) }.value
         }
         if source == .localServer { return try await localServer() }
+        if source.group == "Pandaria" { return try await PandariaServer.shared.log(source, lines: maxLines) }
         return try await HomeServer.shared.log(source, lines: maxLines)
     }
 
@@ -286,7 +297,11 @@ enum LogReader {
                 } else {
                     from = "output"; level = guess(message)
                 }
-            case .homeSetup, .homeUpdate:
+            case .pandariaWorld, .pandariaLogin, .pandariaDatabase:
+                // TrinityCore writes its files without a time or a level.
+                from = source == .pandariaLogin ? "authserver" : "worldserver"
+                level = source == .pandariaDatabase ? .error : guess(line)
+            case .homeSetup, .homeUpdate, .pandariaSetup:
                 if let m = match(step, line) {
                     time = m[0]; from = "step"; message = m[1]; level = guess(m[1]) == .error ? .error : .info
                 } else {
@@ -522,6 +537,8 @@ private struct LogView: View {
         case .localServer: "Start the server on this Mac (Classic › On this Mac) to see its log."
         case .homeUpdate: "No update has run on the home server yet."
         case .homeSetup: "The home server has no setup log."
+        case .pandariaSetup: "Pandaria has no setup log on the home server."
+        case .pandariaWorld, .pandariaLogin: "Start Pandaria (Settings › Pandaria) to see its log."
         default: "Nothing in this log yet."
         }
     }

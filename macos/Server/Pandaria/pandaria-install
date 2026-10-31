@@ -1,0 +1,26 @@
+#!/bin/bash
+# The four databases from the release's dumps (`world.sql` complete; `auth`, `characters`,
+# `playerbots` schemas with their static data), once. The worldserver makes the bots on first start.
+set -euo pipefail
+release=${RELEASE:-v1.1.0-beta}
+zip=LoA-Pandaria-Playerbots-$release-win64-database.zip
+mysql=(mysql -hdatabase -uroot "-p$MYSQL_ROOT_PASSWORD")
+if [ "$("${mysql[@]}" -N -B -e "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name = 'world'")" != 0 ]; then
+    echo "already installed"
+    exit 0
+fi
+cd /tmp
+curl -fsSL -o db.zip "https://github.com/1LineAtaTime/LoA-Pandaria-Playerbots/releases/download/$release/$zip"
+unzip -q -o db.zip -d db
+"${mysql[@]}" -e "CREATE USER IF NOT EXISTS 'pandaria'@'%' IDENTIFIED BY 'pandaria';"
+for name in auth characters playerbots world; do
+    file=$(find db -name "$name.sql" | head -n 1)
+    [ -n "$file" ] || { echo "no $name.sql in $zip" >&2; exit 1; }
+    echo "importing $name…"
+    "${mysql[@]}" -e "CREATE DATABASE \`$name\` DEFAULT CHARACTER SET utf8mb4; GRANT ALL ON \`$name\`.* TO 'pandaria'@'%';"
+    "${mysql[@]}" "$name" < "$file"
+done
+# The realm's address, for the client's realm list.
+"${mysql[@]}" auth -e "UPDATE realmlist SET address = '${REALM_ADDRESS:-127.0.0.1}', name = 'Pandaria (bots)' WHERE id = 1;"
+rm -rf db db.zip
+echo installed

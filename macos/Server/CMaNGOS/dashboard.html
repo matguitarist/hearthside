@@ -57,6 +57,18 @@ svg.spark path.area { fill: var(--bar); opacity: .12; }
 code { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
 .empty { color: var(--dim); }
 .stale { color: var(--orange); }
+.card h2 .tabs { float: right; text-transform: none; letter-spacing: 0; }
+.tabs button { font: inherit; font-size: 13px; color: var(--dim); background: none; border: 1px solid var(--line);
+               padding: 2px 10px; cursor: pointer; }
+.tabs button:first-child { border-radius: 999px 0 0 999px; } .tabs button:last-child { border-radius: 0 999px 999px 0; margin-left: -1px; }
+.tabs button.on { color: var(--text); background: var(--line); }
+.map { position: relative; aspect-ratio: 1002 / 668; border-radius: 10px; overflow: hidden; background: var(--line); }
+.map img, .map svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.map img { object-fit: fill; }
+.map svg circle.bot { fill: #ffd60a; stroke: #000; stroke-opacity: .5; stroke-width: .6; }
+.map svg circle.player { fill: #0a84ff; stroke: #fff; stroke-width: 1.5; }
+.map svg text { font: 600 13px -apple-system, BlinkMacSystemFont, sans-serif; fill: #fff; stroke: #000; stroke-width: 3; paint-order: stroke; }
+.map .missing { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 20px; text-align: center; color: var(--dim); }
 </style>
 </head>
 <body>
@@ -100,6 +112,13 @@ code { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
       <div class="bars" id="levels"></div>
     </section>
 
+    <section class="card wide">
+      <h2>World map <span class="tabs" id="tabs"><button data-map="0">Eastern Kingdoms</button><button data-map="1">Kalimdor</button></span></h2>
+      <div class="map"><img id="map-img" alt=""><svg id="map-dots" viewBox="0 0 1002 668"></svg>
+        <div class="missing" id="map-missing" hidden>The map pictures come from your game files: open Settings › Home Server in the launcher once to copy them here.</div></div>
+      <div class="sub" id="map-sub"></div>
+    </section>
+
     <section class="card half">
       <h2>Bots online, last 24 hours</h2>
       <svg class="spark" id="spark-bots" viewBox="0 0 100 40" preserveAspectRatio="none"></svg>
@@ -132,7 +151,14 @@ code { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
 const RACES = {1:"Human",2:"Orc",3:"Dwarf",4:"Night Elf",5:"Undead",6:"Tauren",7:"Gnome",8:"Troll"};
 const CLASSES = {1:"Warrior",2:"Paladin",3:"Hunter",4:"Rogue",5:"Priest",7:"Shaman",8:"Mage",9:"Warlock",11:"Druid"};
 const SETTINGS = {BOTS:"Bots", BOTS_NEAR_PLAYERS:"Bots come to players", BOTS_SYNC_LEVEL:"Bots near players' level",
-  RATE_XP:"Experience", RATE_LOOT:"Loot", RATE_GOLD:"Gold", RATE_REPUTATION:"Reputation", RATE_REST:"Rested"};
+  RATE_XP:"Experience", RATE_LOOT:"Loot", RATE_GOLD:"Gold", RATE_REPUTATION:"Reputation", RATE_REST:"Rested",
+  AH_ENABLED:"Auction house bot", AH_PRICES:"Auction prices", AH_STOCK:"Auction stock"};
+// Each continent's world map, as WorldMapArea.dbc bounds it: the y at its left and right edges,
+// the x at its top and bottom (the world's x runs north, its y west).
+const MAPS = {0: {file: "azeroth.png", left: 16000, right: -19200, top: 7467, bottom: -16000},
+              1: {file: "kalimdor.png", left: 17067, right: -19733, top: 12800, bottom: -11733}};
+let shownMap = 0, last;
+try { shownMap = Number(localStorage.getItem("map")) === 1 ? 1 : 0; } catch (e) {}
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const gb = b => (b / 1073741824).toFixed(1) + " GB";
@@ -160,6 +186,28 @@ function spark(id, points, max) {
   const xy = points.map(p => [((p[0] - t0) / span * 100).toFixed(2), (40 - p[1] / m * 38).toFixed(2)]);
   const line = "M" + xy.map(p => p.join(",")).join("L");
   svg.innerHTML = `<path class="area" d="${line}L100,40L0,40Z"/><path class="line" d="${line}"/>`;
+}
+
+function drawMap(s) {
+  const m = MAPS[shownMap];
+  document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("on", Number(b.dataset.map) === shownMap));
+  const img = $("map-img");
+  if (!img.src.endsWith(m.file)) {
+    $("map-missing").hidden = true;
+    img.hidden = false;
+    img.src = m.file;
+  }
+  if (!s) return;
+  const at = (x, y) => [((m.left - y) / (m.left - m.right) * 1002).toFixed(1), ((m.top - x) / (m.top - m.bottom) * 668).toFixed(1)];
+  const bots = (s.botPositions || []).filter(b => b[0] === shownMap);
+  const players = s.players.filter(p => p.map === shownMap);
+  $("map-dots").innerHTML =
+    bots.map(b => { const [x, y] = at(b[1], b[2]); return `<circle class="bot" cx="${x}" cy="${y}" r="3.5"><title>Bot, level ${b[3]}</title></circle>`; }).join("") +
+    players.map(p => { const [x, y] = at(p.x, p.y);
+      return `<circle class="player" cx="${x}" cy="${y}" r="6"><title>${esc(p.name)}, level ${p.level}</title></circle><text x="${Number(x) + 9}" y="${Number(y) + 4}">${esc(p.name)}</text>`; }).join("");
+  const elsewhere = s.players.length - s.players.filter(p => p.map === 0 || p.map === 1).length;
+  $("map-sub").textContent = `${bots.length} bots and ${players.length} ${players.length === 1 ? "player" : "players"} here` +
+    (elsewhere ? ` · ${elsewhere} in a dungeon or battleground` : "") + ". Positions are as last saved, every few minutes.";
 }
 
 async function load() {
@@ -219,17 +267,27 @@ async function load() {
 
   $("settings").innerHTML = Object.entries(SETTINGS).filter(([k]) => s.settings[k] !== undefined).map(([k, name]) => {
     let v = s.settings[k];
-    if (k.startsWith("RATE_")) v = "×" + v;
+    if (k.startsWith("RATE_") || k === "AH_PRICES" || k === "AH_STOCK") v = "×" + v;
     else if (k !== "BOTS") v = v === "1" ? "on" : "off";
     return `<span class="pill">${name}: ${esc(v)}</span>`;
-  }).join("");
+  }).join("") + (s.auctions ? `<div class="sub" style="margin-top:6px">${s.auctions.toLocaleString()} auctions on sale</div>` : "");
   const sw = s.software;
   $("software").innerHTML = `CMaNGOS <code>${esc((sw.CMANGOS_REF || "").slice(0, 7))}</code> · playerbots <code>${esc((sw.PLAYERBOTS_REF || "").slice(0, 7))}</code> · classic-db <code>${esc((sw.CLASSICDB_REF || "").slice(0, 7))}</code>` +
     (s.updated_software ? ` · updated ${new Date(s.updated_software).toLocaleDateString()}` : "");
 
+  last = s;
+  drawMap(s);
+
   $("errors").innerHTML = s.errors.length ? s.errors.map(esc).join("\n") : `<span class="ok">No errors lately.</span>`;
 }
 
+$("map-img").addEventListener("error", () => { $("map-img").hidden = true; $("map-missing").hidden = false; });
+document.querySelectorAll("#tabs button").forEach(b => b.addEventListener("click", () => {
+  shownMap = Number(b.dataset.map);
+  try { localStorage.setItem("map", shownMap); } catch (e) {}
+  drawMap(last);
+}));
+drawMap();
 load();
 setInterval(load, 30000);
 </script>

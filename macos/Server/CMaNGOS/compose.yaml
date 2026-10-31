@@ -51,7 +51,16 @@ services:
 
   mangosd:
     <<: *server
-    command: ['/opt/cmangos/bin/mangosd']
+    # The auction house bot's stock, AH_STOCK times each category's count in `ahbot.conf`, scaled
+    # from the image's copy kept beside it, so a plain restart does not scale it twice.
+    command:
+      - /bin/bash
+      - -euc
+      - |
+        c=/opt/cmangos/etc/ahbot.conf
+        [ -f $$c.orig ] || cp $$c $$c.orig
+        awk -v k="$${AH_STOCK:-1}" '/^AhBot\.MaxAuctionCount\./ { n = int($$3 * k + 0.5); if ($$3 > 0 && n < 1) n = 1; $$3 = n } { print }' $$c.orig >$$c
+        exec /opt/cmangos/bin/mangosd
     stop_grace_period: 2m # Gives the server time to save characters.
     healthcheck:
       test: ['CMD', 'bash', '-c', '</dev/tcp/localhost/8085']
@@ -93,6 +102,10 @@ services:
       - Mangosd_Rate_Rest_InGame=${RATE_REST:-1}
       - Mangosd_Rate_Rest_Offline_InTavernOrCity=${RATE_REST:-1}
       - Mangosd_Rate_Rest_Offline_InWilderness=${RATE_REST:-1}
+      # The auction house's bot (playerbots' `ahbot.conf`): whether it trades, its prices.
+      - AHBot_AhBot_Enabled=${AH_ENABLED:-1}
+      - AHBot_AhBot_PriceMultiplier=${AH_PRICES:-0.35}
+      - AH_STOCK=${AH_STOCK:-1}
 
   # Setup only: every database from scratch.
   install:

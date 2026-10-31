@@ -70,7 +70,8 @@ Run `make` (or `make help`) to list every target.
 
 ### Native macOS app
 
-`make app` builds `Azeroth Survivors.app`: the native game with a launcher that downloads the
+`make app` builds `Hearthside.app`, this fork's Mac app: the native game with a launcher that
+also plays Classic 1.12 and Mists of Pandaria on servers of your own. It downloads the
 game data on first run (resumable, checksummed), edits graphics and sound settings, and updates
 itself with Sparkle. `make release-mac` notarizes it and writes the dmg, zip and appcast. See
 [macos/README.md](macos/README.md).

@@ -3,9 +3,9 @@ import Foundation
 /// Where the launcher and the game keep things. Nothing is written inside the app bundle: an
 /// update replaces the bundle, and writing into a signed bundle breaks its signature.
 enum Paths {
-    static let appName = "Azeroth Survivors"
+    static let appName = "Hearthside"
 
-    /// ~/Library/Application Support/Azeroth Survivors: the game's working directory.
+    /// ~/Library/Application Support/Hearthside: the game's working directory.
     static var support: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent(appName, isDirectory: true)
@@ -50,6 +50,7 @@ enum Prefs {
     static let homeHostKey = "homeServerHost"
     static let homeKeyKey = "homeServerKey"
     static let homeDirKey = "homeServerFolder"
+    static let pandariaFolderKey = "pandariaFolder"
 
     static let defaultDataURL = "https://archive.org/download/WoW_1.12.1-5875/1.12.1-5875_enUS.zip"
 
@@ -61,14 +62,16 @@ enum Prefs {
     }
 }
 
-/// Which game Play starts: the survivors mode, or the original game on a 1.12 server.
+/// Which game Play starts: the survivors mode, the original game on a 1.12 server, or Mists of
+/// Pandaria with the player's own 5.4.8 client on the home server (`Pandaria.swift`).
 enum GameMode: String, CaseIterable, Identifiable {
-    case survivors, classic
+    case survivors, classic, pandaria
     var id: String { rawValue }
     var label: String {
         switch self {
         case .survivors: "Survivors"
         case .classic: "Classic"
+        case .pandaria: "Pandaria"
         }
     }
     static var current: GameMode {

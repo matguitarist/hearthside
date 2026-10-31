@@ -1,0 +1,106 @@
+# The Pandaria server on the home server: authserver, worldserver and MySQL 8.0, ports on the LAN
+# address only. It takes the same ports as the CMaNGOS server (3724, 8085), so one runs at a time.
+
+name: azeroth-survivors-pandaria
+
+x-server: &server
+  image: azeroth-survivors-pandaria:1
+  depends_on:
+    database:
+      condition: service_healthy
+
+services:
+  database:
+    image: mysql:8.0
+    restart: unless-stopped
+    stop_grace_period: 2m
+    command: ['--innodb-buffer-pool-size=1G', '--innodb-flush-log-at-trx-commit=2', '--max-allowed-packet=256M']
+    healthcheck:
+      test: ['CMD-SHELL', 'mysqladmin ping -uroot -p"$$MYSQL_ROOT_PASSWORD" --silent']
+      interval: 1m
+      timeout: 5s
+      retries: 5
+      start_period: 10m
+      start_interval: 2s
+    volumes:
+      - pandaria-database:/var/lib/mysql
+    environment:
+      - TZ=Etc/UTC
+      - MYSQL_ROOT_PASSWORD=password # Not published: the database is reachable from the containers only.
+
+  authserver:
+    <<: *server
+    build: .
+    restart: unless-stopped
+    command: ['/opt/pandaria/bin/authserver']
+    ports:
+      - ${LAN_IP}:3724:3724
+    volumes:
+      - ./storage/logs:/logs
+    environment:
+      - TZ=Etc/UTC
+
+  worldserver:
+    <<: *server
+    restart: unless-stopped
+    command: ['/opt/pandaria/bin/worldserver']
+    stop_grace_period: 2m
+    stdin_open: true
+    ports:
+      - ${LAN_IP}:8085:8085
+    volumes:
+      - ./storage/data:/data:ro
+      - ./storage/logs:/logs
+    environment:
+      - TZ=Etc/UTC
+
+  # Setup only: the databases from the release's dumps.
+  install:
+    <<: *server
+    profiles: ['tools']
+    command: ['pandaria-install']
+    environment:
+      - MYSQL_ROOT_PASSWORD=password
+      - REALM_ADDRESS=${LAN_IP}
+
+  # The server's data from the client's MPQs: DBC files, maps and cameras, then the buildings'
+  # line-of-sight models. Run in a copy of the client folder's layout, as the tools expect.
+  extract:
+    image: azeroth-survivors-pandaria:1
+    profiles: ['tools']
+    working_dir: /work
+    entrypoint:
+      - /bin/bash
+      - -euc
+      - |
+        b=/opt/pandaria/bin
+        rm -rf ./Buildings ./cameras ./dbc ./maps ./vmaps
+        $$b/mapextractor
+        $$b/vmap4extractor
+        mkdir vmaps
+        $$b/vmap4assembler Buildings vmaps
+        rm -rf /data/cameras /data/dbc /data/maps /data/vmaps ./Buildings
+        mv ./cameras ./dbc ./maps ./vmaps /data/
+        ls /data/maps | grep -q '\.map$$'
+    volumes:
+      - ./storage/extract:/work
+      - ${CLIENT_DATA}:/work/Data:ro
+      - ./storage/data:/data
+
+  # Movement maps from the above, for the bots: several hours, every core, once.
+  mmaps:
+    image: azeroth-survivors-pandaria:1
+    profiles: ['tools']
+    working_dir: /data
+    entrypoint:
+      - /bin/bash
+      - -euc
+      - |
+        rm -rf mmaps && mkdir mmaps
+        /opt/pandaria/bin/mmaps_generator
+        ls mmaps | grep -q 'mmtile$$'
+    volumes:
+      - ./storage/data:/data
+
+volumes:
+  pandaria-database:

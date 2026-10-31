@@ -4,7 +4,7 @@ import SwiftUI
 /// The Help window: a few topics, searchable, opened from the Help menu at the one asked for.
 
 enum HelpTopic: String, CaseIterable, Identifiable {
-    case start, survivors, controls, classic, addons, homeServer, graphics, troubleshooting, shortcuts
+    case start, survivors, controls, classic, addons, homeServer, pandaria, graphics, troubleshooting, shortcuts
 
     var id: String { rawValue }
 
@@ -16,6 +16,7 @@ enum HelpTopic: String, CaseIterable, Identifiable {
         case .classic: "Classic"
         case .addons: "Classic Addons"
         case .homeServer: "Home Server"
+        case .pandaria: "Pandaria"
         case .graphics: "Graphics & Performance"
         case .troubleshooting: "Troubleshooting"
         case .shortcuts: "Keyboard Shortcuts"
@@ -30,6 +31,7 @@ enum HelpTopic: String, CaseIterable, Identifiable {
         case .classic: "globe.europe.africa"
         case .addons: "puzzlepiece.extension"
         case .homeServer: "house"
+        case .pandaria: "mountain.2"
         case .graphics: "display"
         case .troubleshooting: "stethoscope"
         case .shortcuts: "command"
@@ -39,16 +41,16 @@ enum HelpTopic: String, CaseIterable, Identifiable {
     var blocks: [HelpBlock] {
         switch self {
         case .start:
-            [.p("Azeroth Survivors is a free, fan-made WoW roguelike by Aethus, running on a from-scratch WoW 1.12.1 client. The launcher also plays **Classic**, the original 1.12.1 game, on a server of your own."),
+            [.p("Hearthside plays **Survivors**, Azeroth Survivors: a free, fan-made WoW roguelike by Aethus, running on a from-scratch WoW 1.12.1 client. It also plays **Classic**, the original 1.12.1 game, on a server of your own, and **Pandaria**, Mists of Pandaria 5.4.8 on your home server with your own 5.4.8 client."),
              .h("The game data"),
              .p("On first launch the launcher downloads the WoW 1.12.1 game data (about 5.4 GB). The download resumes where it stopped and every file is checked. If you already have a 1.12.1 **Data** folder, choose it in **Settings › General › Folder** instead."),
              .h("Playing"),
-             .bullets(["Pick **Survivors** or **Classic** in the launcher, or in **Game › Mode**.",
+             .bullets(["Pick **Survivors**, **Classic** or **Pandaria** in the launcher, or in **Game › Mode**.",
                        "Press **Play** (⌘P). The launcher steps aside while the game runs.",
                        "When the game quits the launcher comes back, or quits: **Settings › General › When the game quits**.",
                        "Hold ⌥ Option while opening the app to see the launcher when **Start the game directly** is on."]),
              .h("Updates"),
-             .p("The app updates itself: it checks on its own, or use **Azeroth Survivors › Check for Updates…**. **Help › Release Notes** lists what changed.")]
+             .p("The app updates itself: it checks on its own, or use **Hearthside › Check for Updates…**. **Help › Release Notes** lists what changed.")]
         case .survivors:
             [.p("Pick a race, gender, class and zone, then survive: you move, your abilities cast themselves, enemies come in waves, and a boss shows up every couple of minutes."),
              .bullets(["**Level up:** three cards are dealt. Their colour, as WoW's item quality, says how strong a pick is, and each lists exactly what changes. Press **1**, **2** or **3**, or click one.",
@@ -78,9 +80,16 @@ enum HelpTopic: String, CaseIterable, Identifiable {
         case .addons:
             [.p("Unless you turn it off in **Settings › General**, the launcher installs two addons before each Classic launch. Your other addons in the AddOns folder are left alone, and their settings are kept."),
              .h("AzerothPlus"),
-             .p("Open its options with **/ap** or its minimap button: a box per feature. It adds a cooldown manager, a damage meter, a swing timer, a personal resource display, centered unit frames, an objectives tracker, a windowed map with the zone's quests, quest markers on the map and minimap, and minimap coordinates. **/ap lock** locks the frames after you drag them."),
+             .p("Open its options with **/ap** or its minimap button: a tab per kind of feature, a box per feature. **/ap lock** locks the frames after you drag them."),
+             .bullets(["**Combat:** a cooldown manager, a damage meter, a swing timer and a personal resource display.",
+                       "**Interface:** centered unit frames, health in numbers on the target frame and in tooltips, minimap coordinates, and a windowed map with the zone's quests.",
+                       "**Quests:** an objectives tracker, quest markers on the map and minimap, quest levels in the log, quest progress in tooltips, and quests accepted and handed in for you (hold Shift to do it yourself).",
+                       "**Items:** grey items sold and gear repaired at vendors (hold Shift as you open one to skip it), a search box on your bags, and vendor prices in tooltips.",
+                       "**Bots:** a party panel (**/ap bots**) that finds bots of your level nearby, invites them, and tells your party to follow, stay, attack your target and more."]),
              .h("AzerothAdmin"),
-             .p("**/aa** opens game master tools for an administrator on your own server: levels, gold, teleports, items, and the bots on CMaNGOS.")]
+             .p("**/aa** opens game master tools for an administrator on your own server: levels, gold, teleports, items, and the bots on CMaNGOS."),
+             .h("In Pandaria"),
+             .p("Pandaria gets versions of both written for the 5.4.8 client, installed at each launch under the same setting. Their bot panel makes bots of any class with the server's **.playerbots** commands.")]
         case .homeServer:
             [.p("Runs CMaNGOS with bots on an always-on Linux machine with Docker (an Unraid box, say), managed from the launcher over SSH. Keep it on your home network: forward nothing to it from the internet."),
              .h("Setting it up"),
@@ -88,9 +97,21 @@ enum HelpTopic: String, CaseIterable, Identifiable {
                        "**Create Key**, then **Copy Public Key** and add it to the login's authorized keys. On Unraid: Users › root › SSH authorized keys.",
                        "**Connect**, then **Set Up Home Server**. It copies about 4 GB of game files and builds the server and its maps: an hour or two on a small CPU. You can quit the launcher meanwhile."]),
              .h("Bots & Rates"),
-             .p("The number of bots (each 100 take about 1 GB of memory), whether they come to the zones where people play, whether they stay near the players' level, and the experience, loot, gold, reputation and rested rates. **Apply** restarts the game server once for all of them."),
+             .p("The number of bots (each 100 take about 1 GB of memory), whether they come to the zones where people play, whether they stay near the players' level, and the experience, loot, gold, reputation and rested rates, and the auction house bot: whether it trades, its prices and how much it stocks. **Apply** restarts the game server once for all of them."),
+             .h("Dashboard"),
+             .p("**Open Dashboard** (Server menu) shows the server in any browser at home: who is playing, the bots by level and on a world map, memory and CPU over the last day, backups and settings."),
              .h("Backups & Updates"),
              .p("Every night at 4:30 the server saves its accounts and characters and keeps the last 14. **Back Up Now** and **Restore…** are in **Settings › Backups & Updates**; a restore saves the current state first. **Check for Updates** compares the server with the newest CMaNGOS; **Update Server…** rebuilds it, keeps everyone's characters, and puts the old server back if anything fails.")]
+        case .pandaria:
+            [.p("Plays Mists of Pandaria 5.4.8 with bots, on a TrinityCore server built on your home server beside Classic. It needs a home server (see **Home Server**) and your own World of Warcraft 5.4.8 for Mac: no Blizzard files ship with this app."),
+             .h("Setting it up"),
+             .bullets(["Pick **Pandaria** in the launcher, then **Choose Client Folder…**: the folder holding World of Warcraft-64.app and Data.",
+                       "**Set Up Pandaria** copies the client's game files (about 23 GB) to the home server, then builds the server from source and reads its maps: a few hours on a small CPU. You can quit the launcher meanwhile.",
+                       "When it runs, create your account in the launcher, then press **Play**."]),
+             .h("The client"),
+             .p("The first Play prepares your client: it is patched to sign in to your server, its graphics get fixes for current macOS and AMD FSR sharpening, and it is signed for this Mac. It runs under Rosetta 2 and needs Apple's command line developer tools (xcode-select --install). **Settings › Pandaria › Prepare Again** redoes it."),
+             .h("One server at a time"),
+             .p("Pandaria and Classic on the home server use the same ports, so starting one stops the other. Pandaria keeps running when the game quits; stop it in the **Server** menu.")]
         case .graphics:
             [.p("Graphics and sound are in **Settings › Graphics** and **Sound**, or in the game's own Settings. They are locked while the game runs, which saves its own copy when it quits."),
              .bullets(["**Presets:** Performance, Balanced and Quality set several options at once.",

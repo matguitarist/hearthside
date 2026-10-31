@@ -59,10 +59,12 @@ jobs:
         run: for f in addons/*/*.lua; do luac5.1 -p "$f" || exit 1; done
       - name: Quest markers against a stubbed client
         run: lua5.1 scripts/addon-tests/questmap.lua addons/AzerothPlus
+      - name: Vendors, tooltips, quest helpers and the bot panel against a stubbed client
+        run: lua5.1 scripts/addon-tests/features.lua addons/AzerothPlus
       - name: The home-server scripts parse
         run: for f in macos/Server/CMaNGOS/home-* scripts/questdb-dump.sh; do bash -n "$f" || exit 1; done
       - name: The quest data builder compiles
-        run: python3 -m py_compile scripts/questdb.py
+        run: python3 -m py_compile scripts/questdb.py scripts/infodb.py
 
   launcher:
     runs-on: macos-15
@@ -82,4 +84,4 @@ jobs:
       - name: The launcher typechecks
         run: |
           xcrun swiftc -swift-version 5 -parse-as-library -typecheck -target arm64-apple-macos14.0 \
-            -module-name AzerothSurvivors -F sparkle macos/Launcher/*.swift
+            -module-name Hearthside -F sparkle macos/Launcher/*.swift

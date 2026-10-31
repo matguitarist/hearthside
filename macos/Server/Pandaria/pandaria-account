@@ -1,0 +1,26 @@
+#!/bin/bash
+# An account on the home server's Pandaria realm, from this Mac: `pandaria-account [--gm] [host]`.
+# The password is asked for without echo and never leaves the Mac: only SHA1("NAME:PASSWORD"),
+# uppercased as the server's own `account create` does, goes to the database.
+set -euo pipefail
+gm=0
+[[ ${1:-} == --gm ]] && { gm=3; shift; }
+host=${1:-192.168.40.210}
+key=~/.ssh/id_ed25519_homeserver
+
+read -rp "Account name: " name
+name=$(tr '[:lower:]' '[:upper:]' <<<"$name")
+[[ $name =~ ^[A-Z0-9]{3,16}$ ]] || { echo "3 to 16 letters or digits" >&2; exit 1; }
+read -rsp "Password: " pass; echo
+read -rsp "Again: " again; echo
+[[ $pass == "$again" ]] || { echo "the passwords differ" >&2; exit 1; }
+[[ ${#pass} -ge 4 && ${#pass} -le 16 ]] || { echo "4 to 16 characters" >&2; exit 1; }
+hash=$(printf '%s:%s' "$name" "$(tr '[:lower:]' '[:upper:]' <<<"$pass")" | shasum -a 1 | cut -d' ' -f1 | tr '[:lower:]' '[:upper:]')
+unset pass again
+
+ssh -i "$key" "root@$host" docker exec -i azeroth-survivors-pandaria-database-1 mysql -uroot -ppassword auth 2>/dev/null <<SQL
+INSERT INTO account (username, sha_pass_hash, email, joindate) VALUES ('$name', '$hash', '', NOW());
+INSERT INTO realmcharacters (realmid, acctid, numchars) SELECT id, LAST_INSERT_ID(), 0 FROM realmlist;
+INSERT INTO account_access (id, gmlevel, RealmID) SELECT LAST_INSERT_ID(), $gm, -1 FROM DUAL WHERE $gm > 0;
+SQL
+echo "created $name$([[ $gm -gt 0 ]] && echo ' (game master)')"

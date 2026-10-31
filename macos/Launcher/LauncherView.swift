@@ -8,6 +8,7 @@ struct LauncherView: View {
     @EnvironmentObject private var config: GameConfig
     @EnvironmentObject private var server: LocalServer
     @EnvironmentObject private var home: HomeServer
+    @EnvironmentObject private var pandaria: PandariaServer
     @Environment(\.openWindow) private var openWindow
     @AppStorage(Prefs.skipLauncherKey) private var skipLauncher = false
     @AppStorage(Prefs.modeKey) private var mode: GameMode = .survivors
@@ -22,23 +23,46 @@ struct LauncherView: View {
     }
 
     var body: some View {
-        ZStack(alignment: .bottomLeading) {
+        ZStack {
             background
-            LinearGradient(colors: [.clear, .black.opacity(0.55), .black.opacity(0.92)],
+            // Dark at the top for the title, darker at the bottom for the panel and Play.
+            LinearGradient(stops: [.init(color: .black.opacity(0.55), location: 0),
+                                   .init(color: .clear, location: 0.28),
+                                   .init(color: .black.opacity(0.5), location: 0.55),
+                                   .init(color: .black.opacity(0.92), location: 1)],
                            startPoint: .top, endPoint: .bottom)
-            VStack(alignment: .leading, spacing: 18) {
-                VStack(alignment: .leading, spacing: 4) {
+            // The same frame in every mode: title and modes at the top, Play and the version at
+            // the bottom, the mode's panel growing upward from Play.
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(alignment: .center) {
                     Text(Paths.appName)
-                        .font(.system(size: 40, weight: .heavy, design: .serif))
+                        .font(.system(size: 34, weight: .heavy, design: .serif))
                         .shadow(radius: 6)
-                    Text(version)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
+                    Spacer()
+                    if data.state == .ready {
+                        Picker("Mode", selection: $mode) {
+                            ForEach(GameMode.allCases) { Text($0.label).tag($0) }
+                        }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                        .frame(width: 300)
+                        .disabled(game.running)
+                    }
                 }
+                Spacer(minLength: 16)
                 status
                     .frame(maxWidth: .infinity, alignment: .leading)
+                HStack(alignment: .center, spacing: 16) {
+                    if data.state == .ready { playButton }
+                    Spacer()
+                    Text(version)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.top, 18)
+                .frame(minHeight: 34)
             }
-            .padding(32)
+            .padding(28)
             .foregroundStyle(.white)
         }
         .frame(width: 820, height: 480)
@@ -72,17 +96,21 @@ struct LauncherView: View {
         }
     }
 
+    /// Each mode's key art, crossfading as the mode changes.
     @ViewBuilder private var background: some View {
-        if let url = Bundle.main.url(forResource: "background", withExtension: "jpg"),
-           let image = NSImage(contentsOf: url) {
-            Image(nsImage: image)
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-                .frame(width: 820, height: 480)
-                .clipped()
-        } else {
+        ZStack {
             Color(red: 0.08, green: 0.07, blue: 0.1)
+            if let image = KeyArt.image(for: mode) {
+                Image(nsImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: 820, height: 480)
+                    .clipped()
+                    .id(mode)
+                    .transition(.opacity)
+            }
         }
+        .animation(.easeInOut(duration: 0.35), value: mode)
     }
 
     @ViewBuilder private var status: some View {
@@ -94,27 +122,14 @@ struct LauncherView: View {
             }
 
         case .ready:
-            VStack(alignment: .leading, spacing: 14) {
-                Picker("Mode", selection: $mode) {
-                    ForEach(GameMode.allCases) { Text($0.label).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .frame(width: 240)
-                .disabled(game.running)
-                if mode == .classic { classic }
-                HStack(alignment: .center, spacing: 16) {
-                    Button(action: play) {
-                        Text(game.running ? "Playing" : "Play")
-                            .font(.title2.weight(.bold))
-                            .frame(width: 180, height: 34)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(Color(red: 0.75, green: 0.45, blue: 0.1))
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(game.running || !Launcher.canPlay(server: server, home: home))
-                    SettingsLink()
-                }
+            switch mode {
+            case .survivors:
+                Text("Pick a race, a class and a zone, then survive the waves. Your picks are remembered between runs.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: 560, alignment: .leading)
+            case .classic: classic
+            case .pandaria: PandariaPanel().frame(maxWidth: 560, alignment: .leading)
             }
 
         case .missing(let files):
@@ -170,6 +185,21 @@ struct LauncherView: View {
         }
     }
 
+    private var playButton: some View {
+        HStack(spacing: 16) {
+            Button(action: play) {
+                Text(game.running ? "Playing" : "Play")
+                    .font(.title2.weight(.bold))
+                    .frame(width: 180, height: 34)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(Color(red: 0.75, green: 0.45, blue: 0.1))
+            .keyboardShortcut(.defaultAction)
+            .disabled(game.running || !Launcher.canPlay(server: server, home: home))
+            SettingsLink()
+        }
+    }
+
     /// Classic: the server on this Mac, the home server, or one at an address.
     @ViewBuilder private var classic: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -207,6 +237,7 @@ struct LauncherView: View {
     /// looked at.
     private func prewarm() {
         Task {
+            if mode == .pandaria { await pandaria.refresh(); return }
             if mode == .classic, classicServer == .home { await home.refresh(); return }
             await server.refresh()
             guard mode == .classic, classicServer == .local, !game.running, server.phase == .stopped else { return }
@@ -263,4 +294,25 @@ struct LauncherView: View {
 
 extension GameProcess.Crash: Equatable {
     static func == (a: Self, b: Self) -> Bool { a.id == b.id }
+}
+
+/// The launcher's key art per mode: `survivors.heic` from the README's screenshot, and Classic's and
+/// Pandaria's when the app was built with them (`macos/art/`), else Survivors'.
+@MainActor
+enum KeyArt {
+    private static var cache: [GameMode: NSImage] = [:]
+
+    static func image(for mode: GameMode) -> NSImage? {
+        if let image = cache[mode] { return image }
+        let name = switch mode {
+        case .survivors: "survivors"
+        case .classic: "classic"
+        case .pandaria: "pandaria"
+        }
+        let url = Bundle.main.url(forResource: name, withExtension: "heic")
+            ?? Bundle.main.url(forResource: "survivors", withExtension: "heic")
+        let image = url.flatMap(NSImage.init(contentsOf:))
+        cache[mode] = image
+        return image
+    }
 }

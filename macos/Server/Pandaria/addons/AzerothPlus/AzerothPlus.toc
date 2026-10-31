@@ -1,0 +1,19 @@
+## Interface: 50400
+## Title: Azeroth|cffffd100Plus|r
+## Notes: Modern conveniences for 5.4.8: a cooldown manager, a damage meter, a swing timer, a personal resource display, centered unit frames, coordinates under the minimap, quest levels and automatic quest hand-ins, health numbers in tooltips, grey selling, auto-repair, and a bot party panel. /ap for options.
+## Author: Hearthside
+## Version: 1.1
+## SavedVariablesPerCharacter: AzerothPlusDB
+core.lua
+cooldowns.lua
+meter.lua
+swing.lua
+resource.lua
+frames.lua
+minimap.lua
+quests.lua
+merchant.lua
+tooltips.lua
+bots.lua
+options.lua
+button.lua

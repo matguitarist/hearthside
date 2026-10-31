@@ -21,6 +21,15 @@ local DEFAULTS = {
   objectivesFolded = false,
   map = false,
   questMarkers = true,
+  questLevels = true,
+  autoQuest = false,
+  tipQuest = true,
+  tipHealth = true,
+  tipPrice = true,
+  sellGreys = true,
+  autoRepair = true,
+  bagSearch = true,
+  botPanel = false,
   untracked = {},
   mapFolded = {},
   positions = {},
@@ -170,6 +179,8 @@ SlashCmdList["AZEROTHPLUS"] = function(msg)
   elseif msg == "reset" then
     AP:ResetPositions()
     AP:Print("frame positions reset.")
+  elseif msg == "bots" then
+    AP:ToggleBots()
   elseif msg == "meter reset" then
     if AP.modules.meter and AP.modules.meter.reset then
       AP.modules.meter.reset()

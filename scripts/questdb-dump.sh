@@ -15,3 +15,6 @@ q gloot "select entry, item, ChanceOrQuestChance from gameobject_loot_template w
 q item "select entry, name from item_template"
 q cend "select id, quest from creature_involvedrelation"
 q gend "select id, quest from gameobject_involvedrelation"
+# For scripts/infodb.py: what a vendor pays for each item, and each spawned creature's health.
+q sell "select entry, SellPrice from item_template where SellPrice > 0"
+q health "select t.Name, min(t.MinLevel), max(t.MaxLevel), min(t.MinLevelHealth), max(t.MaxLevelHealth) from creature_template t where t.MaxLevelHealth > 0 and exists (select 1 from creature c where c.id = t.Entry) group by t.Name"

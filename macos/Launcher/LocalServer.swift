@@ -3,7 +3,7 @@ import Foundation
 /// Classic on this Mac: a 1.12.1 server in Docker, one of two kinds ([`ServerKind`]).
 ///
 /// vmangos comes from vmangos-deploy's prebuilt images. Its files live in
-/// `Application Support/Azeroth Survivors/Server`: `compose.yaml` (rewritten from the app's copy at
+/// `Application Support/Hearthside/Server`: `compose.yaml` (rewritten from the app's copy at
 /// every start), `config/` (copied once, then the player's), `storage/` (the extracted maps, logs)
 /// and a Docker volume with the databases. Setup reads the terrain from the game's own Data folder
 /// in seconds and plays without line of sight or pathing; the full extraction adds them later, in

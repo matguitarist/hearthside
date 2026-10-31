@@ -1,6 +1,6 @@
 -- AzerothAdmin's pages: each button is one vmangos GM command (`src/game/Chat/Chat.cpp`), which
 -- `AA:Cmd` respells for CMaNGOS. They need an administrator account (vmangos: level 6 for party
--- bots, 3 to 5 for the rest; CMaNGOS: 3), which the Azeroth Survivors launcher sets under
+-- bots, 3 to 5 for the rest; CMaNGOS: 3), which the Hearthside launcher sets under
 -- Settings › Server.
 
 local AA = AzerothAdmin

@@ -1,0 +1,8 @@
+## Interface: 50400
+## Title: Azeroth|cffff7f00Admin|r
+## Notes: A game master window for the home server's Pandaria realm: levels, gold, cheats, teleports, items, bots. Needs a game master account (pandaria-account --gm). /aa to open.
+## Author: Hearthside
+## Version: 1.0
+## SavedVariablesPerCharacter: AzerothAdminDB
+widgets.lua
+admin.lua

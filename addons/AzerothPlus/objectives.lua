@@ -34,7 +34,7 @@ local list = AP:QuestList(frame, WIDTH, {
 local function update()
   if not AzerothPlusDB.objectives then return end
   local quests = {}
-  local all = AP:Quests()
+  local all = AP:Quests(AzerothPlusDB.questLevels)
   for i = 1, table.getn(all) do
     if AP:IsTracked(all[i].key) then table.insert(quests, all[i]) end
   end

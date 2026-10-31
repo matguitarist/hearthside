@@ -81,6 +81,9 @@ local function lookup(title, level)
   return best
 end
 
+-- The tooltips' quest lines match the log the same way.
+AP.QuestLookup = lookup
+
 -- What to show: one target per unfinished objective (or turn-in), {title, label, color, spots, turnIn}.
 local targets = {}
 

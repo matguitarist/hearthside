@@ -3,7 +3,7 @@ import SwiftUI
 
 /// The panes of Settings, in its sidebar.
 enum SettingsPane: String, CaseIterable, Identifiable {
-    case general, graphics, sound, server, homeServer, homeGame, homeMaintenance, advanced
+    case general, graphics, sound, server, homeServer, homeGame, homeMaintenance, pandaria, advanced
 
     var id: String { rawValue }
 
@@ -16,6 +16,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .homeServer: "Home Server"
         case .homeGame: "Bots & Rates"
         case .homeMaintenance: "Backups & Updates"
+        case .pandaria: "Pandaria"
         case .advanced: "Advanced"
         }
     }
@@ -29,6 +30,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .homeServer: "house"
         case .homeGame: "person.2"
         case .homeMaintenance: "clock.arrow.circlepath"
+        case .pandaria: "mountain.2"
         case .advanced: "wrench.and.screwdriver"
         }
     }
@@ -36,6 +38,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
     static let sections: [(String?, [SettingsPane])] = [
         (nil, [.general, .graphics, .sound]),
         ("Classic servers", [.server, .homeServer, .homeGame, .homeMaintenance]),
+        ("Mists of Pandaria", [.pandaria]),
         (nil, [.advanced]),
     ]
 }
@@ -45,6 +48,7 @@ struct SettingsView: View {
     @AppStorage("settingsPane") private var pane = SettingsPane.general
     @EnvironmentObject private var server: LocalServer
     @EnvironmentObject private var home: HomeServer
+    @EnvironmentObject private var pandaria: PandariaServer
 
     var body: some View {
         NavigationSplitView {
@@ -66,6 +70,7 @@ struct SettingsView: View {
                                 Spacer()
                                 if p == .server { StatusDot(health: server.health) }
                                 if p == .homeServer { StatusDot(health: home.health) }
+                                if p == .pandaria { StatusDot(health: pandaria.health) }
                             }
                             .tag(p)
                         }
@@ -94,6 +99,7 @@ struct SettingsView: View {
         case .homeServer: HomeServerSettings()
         case .homeGame: HomeGameSettings()
         case .homeMaintenance: HomeMaintenanceSettings()
+        case .pandaria: PandariaSettings()
         case .advanced: AdvancedSettings()
         }
     }
@@ -137,7 +143,7 @@ private struct GeneralSettings: View {
             Section("Classic Addons") {
                 Toggle(isOn: $installAddons) {
                     Text("Install AzerothPlus and AzerothAdmin")
-                    Text("AzerothPlus: a cooldown manager, a damage meter, a swing timer, a personal resource display, centered unit frames, an objectives tracker, a windowed map with its quests, quest markers on the map and minimap, and minimap coordinates (/ap or its minimap button). AzerothAdmin: game master tools for an administrator on your own server (/aa).")
+                    Text("AzerothPlus: a cooldown manager, a damage meter, a swing timer, a personal resource display, centered unit frames, an objectives tracker, a windowed map with its quests, quest markers on the map and minimap, and minimap coordinates (/ap or its minimap button). AzerothAdmin: game master tools for an administrator on your own server (/aa). Pandaria gets its own 5.4.8 versions of both, under the same setting.")
                 }
                 Button("Show AddOns Folder") { reveal(Addons.folder) }
             }
@@ -444,7 +450,7 @@ private struct AdvancedSettings: View {
 
             Section("Troubleshooting") {
                 HStack {
-                    Button("Show Logs") { showLogs(.game, openWindow) }
+                    Button("Show Logs…") { showLogs(.game, openWindow) }
                     Button("Show Game Settings Folder") { reveal(Paths.gameConfig) }
                 }
                 Button("Reset Game Settings…") { confirmReset = true }

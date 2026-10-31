@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Build "Azeroth Survivors.app": the game (a player build, `ship` profile) and the Swift launcher
+# Build "Hearthside.app": the game (a player build, `ship` profile) and the Swift launcher
 # that downloads the game data, edits settings and updates itself with Sparkle. See macos/README.md.
 #
-#   scripts/macos-app.sh             build and sign → target/macos/Azeroth Survivors.app
+#   scripts/macos-app.sh             build and sign → target/macos/Hearthside.app
 #   scripts/macos-app.sh --release   also notarize, staple, and write the zip, dmg and appcast.xml
 #
 # Environment (all optional):
@@ -27,9 +27,9 @@ command -v cargo >/dev/null || . "$HOME/.cargo/env"
 RELEASE=0
 [ "${1:-}" = "--release" ] && RELEASE=1
 
-NAME="Azeroth Survivors"
-EXE="AzerothSurvivors"
-BUNDLE_ID="io.github.matguitarist.azeroth-survivors"
+NAME="Hearthside"
+EXE="Hearthside"
+BUNDLE_ID="io.github.matguitarist.hearthside"
 MIN_MACOS="14.0"
 SPARKLE_VERSION="2.10.0"
 SPARKLE_SHA256="c2bf58aa8387266ac179357b1415d6f2635f044da8be41042af32425dae6da0c"
@@ -112,6 +112,8 @@ rm -rf "$APP/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices" \
 cp scripts/data-manifest.tsv "$APP/Contents/Resources/"
 # Classic on this Mac: the compose file and server configs `LocalServer.swift` installs.
 ditto macos/Server "$APP/Contents/Resources/Server"
+# Python's byte-code caches, should a script have been run from the repo.
+find "$APP/Contents/Resources/Server" -name __pycache__ -prune -exec rm -rf {} +
 # Classic's shipped addons, installed into the game's AddOns folder by `Addons.swift`.
 ditto addons "$APP/Contents/Resources/AddOns"
 
@@ -122,7 +124,10 @@ tmp="$(mktemp -d)"
 sw=$(sips -g pixelWidth "$shot" | awk '/pixelWidth/ {print $2}')
 sh=$(sips -g pixelHeight "$shot" | awk '/pixelHeight/ {print $2}')
 sips -c $((sh * 4 / 5)) "$sw" --cropOffset $((sh / 5)) 0 "$shot" --out "$tmp/art.jpg" >/dev/null
-sips -s format jpeg -s formatOptions 85 -Z 1640 "$tmp/art.jpg" --out "$APP/Contents/Resources/background.jpg" >/dev/null
+sips -s format heic -s formatOptions 70 -Z 1640 "$tmp/art.jpg" --out "$APP/Contents/Resources/survivors.heic" >/dev/null
+# Classic's and Pandaria's, Blizzard's key art, kept out of the repository: from `macos/art/`
+# when this Mac has them (classic.heic, pandaria.heic), else those modes show Survivors'.
+for art in macos/art/*.heic; do [ ! -f "$art" ] || cp "$art" "$APP/Contents/Resources/"; done
 w=$(sips -g pixelWidth "$shot" | awk '/pixelWidth/ {print $2}')
 h=$(sips -g pixelHeight "$shot" | awk '/pixelHeight/ {print $2}')
 side=$(( w < h ? w : h ))
@@ -191,8 +196,8 @@ notarize() {
 
 DIST="$OUT/dist"
 rm -rf "$DIST" && mkdir -p "$DIST"
-ZIP="$DIST/AzerothSurvivors-$VERSION.zip"
-DMG="$DIST/AzerothSurvivors-$VERSION.dmg"
+ZIP="$DIST/Hearthside-$VERSION.zip"
+DMG="$DIST/Hearthside-$VERSION.dmg"
 
 echo "notarizing the app…"
 ditto -c -k --keepParent "$APP" "$DIST/notarize.zip"

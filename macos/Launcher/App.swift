@@ -3,6 +3,8 @@ import SwiftUI
 
 @main
 struct LauncherApp: App {
+    // First, before the stores below read their preferences.
+    private let migrated = Migration.run()
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @StateObject private var data = GameData()
     @StateObject private var game = GameProcess()
@@ -10,6 +12,7 @@ struct LauncherApp: App {
     @StateObject private var updater = Updater()
     @ObservedObject private var server = LocalServer.shared
     @ObservedObject private var home = HomeServer.shared
+    @ObservedObject private var pandaria = PandariaServer.shared
 
     var body: some Scene {
         Window(Paths.appName, id: "launcher") {
@@ -20,17 +23,20 @@ struct LauncherApp: App {
                 .environmentObject(updater)
                 .environmentObject(server)
                 .environmentObject(home)
+                .environmentObject(pandaria)
         }
         .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentSize)
         .commands {
-            LauncherCommands(data: data, game: game, config: config, updater: updater, server: server, home: home)
+            LauncherCommands(data: data, game: game, config: config, updater: updater, server: server, home: home,
+                             pandaria: pandaria)
         }
 
         Window("Logs", id: "logs") {
             LogsWindow()
                 .environmentObject(server)
                 .environmentObject(home)
+                .environmentObject(pandaria)
         }
         .defaultSize(width: 1100, height: 700)
 
@@ -47,6 +53,7 @@ struct LauncherApp: App {
                 .environmentObject(updater)
                 .environmentObject(server)
                 .environmentObject(home)
+                .environmentObject(pandaria)
         }
         .windowResizability(.contentMinSize)
     }
@@ -73,10 +80,11 @@ enum Launcher {
     /// Reopens the launcher's window should SwiftUI have released it (set by `LauncherView`).
     static var openLauncher: (() -> Void)?
 
-    /// Play, as the launcher is set: Survivors; Classic at an address; or Classic on this Mac or
-    /// the home server, starting it first when it is not up yet.
+    /// Play, as the launcher is set: Survivors; Classic at an address; Classic on this Mac or the
+    /// home server, or Pandaria, starting its server first when it is not up yet.
     static func play(game: GameProcess, config: GameConfig) {
         guard !game.running else { game.activate(); return }
+        if GameMode.current == .pandaria { playPandaria(game); return }
         guard GameMode.current == .classic else { start(game); return }
         Addons.sync()
         switch ClassicServer.current {
@@ -105,8 +113,22 @@ enum Launcher {
         }
     }
 
-    /// Classic on this Mac or the home server plays once that server is set up and holds an account.
+    /// Pandaria: its server up (started here when stopped, which stops Classic on the same
+    /// machine), then the client readied for it.
+    private static func playPandaria(_ game: GameProcess) {
+        let pandaria = PandariaServer.shared
+        Task { @MainActor in
+            await pandaria.refresh()
+            if pandaria.phase == .stopped || pandaria.phase == .starting { await pandaria.start() }
+            guard pandaria.phase == .running, !game.running, await pandaria.prepareClient() else { return }
+            start(game)
+        }
+    }
+
+    /// Classic on this Mac or the home server, and Pandaria, play once that server is set up and
+    /// holds an account; Pandaria also needs the 5.4.8 client's folder.
     static func canPlay(server: LocalServer, home: HomeServer) -> Bool {
+        if GameMode.current == .pandaria { return PandariaServer.shared.canPlay && PandariaClient.problem == nil }
         guard GameMode.current == .classic else { return true }
         switch ClassicServer.current {
         case .remote: return true

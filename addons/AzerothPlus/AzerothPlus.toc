@@ -1,8 +1,8 @@
 ## Interface: 11200
 ## Title: Azeroth|cffffd100Plus|r
-## Notes: Modern conveniences for 1.12: a cooldown manager, a damage meter, a swing timer, a personal resource display, centered unit frames, coordinates under the minimap, an objectives tracker, a windowed map with quests, and quest markers on the map and minimap. /ap for options.
-## Author: Azeroth Survivors
-## Version: 1.0
+## Notes: Modern conveniences for 1.12: a cooldown manager, a damage meter, a swing timer, a personal resource display, centered unit frames, coordinates under the minimap, an objectives tracker, a windowed map with quests, quest markers, quest levels and automatic quest hand-ins, vendor prices, health numbers and quest progress in tooltips, grey selling, auto-repair, bag search, and a bot party panel. /ap for options.
+## Author: Hearthside
+## Version: 1.1
 ## SavedVariablesPerCharacter: AzerothPlusDB
 core.lua
 cooldowns.lua
@@ -16,5 +16,11 @@ objectives.lua
 map.lua
 questdb.lua
 questmap.lua
+infodb.lua
+merchant.lua
+bagsearch.lua
+tooltips.lua
+quests.lua
+bots.lua
 options.lua
 button.lua

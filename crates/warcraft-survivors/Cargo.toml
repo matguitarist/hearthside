@@ -15,6 +15,9 @@ dev = ["benilla-app/dev"]
 [dependencies]
 benilla-app = { path = "../benilla-app", default-features = false }
 benilla-srp = { path = "../benilla-srp" }
+benilla-formats = { path = "../benilla-formats" }
+anyhow.workspace = true
+image = { version = "0.25", default-features = false, features = ["png"] }
 
 [build-dependencies]
 benilla-buildstamp = { path = "../benilla-buildstamp" }

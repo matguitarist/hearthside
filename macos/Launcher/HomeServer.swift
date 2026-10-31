@@ -55,8 +55,16 @@ final class HomeServer: ObservableObject {
         var gold = 1.0
         var reputation = 1.0
         var rest = 1.0
+        /// The auction house's bot posts and buys auctions.
+        var ahEnabled = true
+        /// Its prices, times each item's value (`AhBot.PriceMultiplier`).
+        var ahPrices = 0.35
+        /// Its stock, times the auctions each category holds in `ahbot.conf`.
+        var ahStock = 1.0
 
         static let rates: [Double] = [1, 1.5, 2, 3, 5]
+        static let ahPriceSteps: [Double] = [0.2, 0.35, 0.5, 0.75, 1, 1.5]
+        static let ahStockSteps: [Double] = [0.25, 0.5, 1, 1.5, 2, 3]
 
         init() {}
 
@@ -70,6 +78,9 @@ final class HomeServer: ObservableObject {
             gold = rate("RATE_GOLD")
             reputation = rate("RATE_REPUTATION")
             rest = rate("RATE_REST")
+            ahEnabled = env["AH_ENABLED"] != "0"
+            ahPrices = env["AH_PRICES"].flatMap(Double.init).map { max(0.05, min($0, 10)) } ?? 0.35
+            ahStock = env["AH_STOCK"].flatMap(Double.init).map { max(0, min($0, 10)) } ?? 1
         }
 
         var env: [(String, String)] {
@@ -80,7 +91,8 @@ final class HomeServer: ObservableObject {
                     // find the players within a session.
                     ("BOTS_MOVE_MIN", botsNearPlayers ? "1800" : "7200"), ("BOTS_MOVE_MAX", botsNearPlayers ? "7200" : "172800"),
                     ("RATE_XP", r(xp)), ("RATE_LOOT", r(loot)), ("RATE_GOLD", r(gold)),
-                    ("RATE_REPUTATION", r(reputation)), ("RATE_REST", r(rest))]
+                    ("RATE_REPUTATION", r(reputation)), ("RATE_REST", r(rest)),
+                    ("AH_ENABLED", ahEnabled ? "1" : "0"), ("AH_PRICES", r(ahPrices)), ("AH_STOCK", r(ahStock))]
         }
     }
     /// The server's backups of its accounts and characters, newest first (`home-backup list`).
@@ -159,7 +171,7 @@ final class HomeServer: ObservableObject {
     }
     var key: URL { URL(fileURLWithPath: (keyPath as NSString).expandingTildeInPath) }
     /// The server's folder; found at the first connection when not set.
-    private var folder: String { UserDefaults.standard.string(forKey: Prefs.homeDirKey) ?? "" }
+    var folder: String { UserDefaults.standard.string(forKey: Prefs.homeDirKey) ?? "" }
 
     /// Another server or login: its folder is looked for again, its accounts are its own.
     func settingsChanged() {
@@ -195,7 +207,7 @@ final class HomeServer: ObservableObject {
 
     /// What is wrong with the settings, if anything. They end up in shell commands: only the
     /// characters an address, a login and a path need.
-    private var problem: String? {
+    var problem: String? {
         if host.isEmpty { return "Enter the server's login and address." }
         guard host.range(of: #"^([A-Za-z0-9._-]+@)?[0-9]{1,3}(\.[0-9]{1,3}){3}$"#, options: .regularExpression) != nil else {
             return "Enter the login and the server's IP address, as root@192.168.1.10."
@@ -283,7 +295,7 @@ final class HomeServer: ObservableObject {
     }
 
     /// The folder on the server, once: Unraid's appdata share if there is one, else the login's home.
-    private func findFolder() async throws {
+    func findFolder() async throws {
         guard folder.isEmpty else { return }
         let found = try await ssh(#"if [ -d /mnt/user/appdata ]; then echo /mnt/user/appdata/azeroth-survivors-cmangos; else echo "$HOME/azeroth-survivors-cmangos"; fi"#,
                                   quiet: true)
@@ -329,6 +341,7 @@ final class HomeServer: ObservableObject {
     func start() async {
         guard isSetUp, !isBusy, phase != .running else { return }
         await run("Starting the server…") {
+            try await self.stopOther()
             try await self.compose("up -d database realmd mangosd")
             try await self.waitHealthy(minutes: 15)
         }
@@ -343,6 +356,7 @@ final class HomeServer: ObservableObject {
     func restart() async {
         guard isSetUp, !isBusy else { return }
         await run("Restarting the server…") {
+            try await self.stopOther()
             try await self.compose("up -d database realmd mangosd")
             try await self.compose("restart realmd mangosd")
             try await self.waitHealthy(minutes: 15)
@@ -360,9 +374,17 @@ final class HomeServer: ObservableObject {
             let delete = pairs.map { "-e '/^\($0.0)=/d'" }.joined(separator: " ")
             let lines = pairs.map { "\($0.0)=\($0.1)" }.joined(separator: "\\n")
             try await self.ssh("sed -i \(delete) \(env) && printf '\(lines)\\n' >> \(env)")
+            try await self.stopOther()
             try await self.compose("up -d database realmd mangosd")
             try await self.waitHealthy(minutes: 30)
         }
+    }
+
+    /// The Pandaria server beside this one takes the same ports: it stops first.
+    private func stopOther() async throws {
+        let other = PandariaServer.folder(beside: folder)
+        try await ssh("[ ! -x \(other)/home-compose ] || \(other)/home-compose stop authserver worldserver database")
+        PandariaServer.shared.otherStarted()
     }
 
     /// Each bot account holds nine characters, with room to spare.
@@ -445,7 +467,22 @@ final class HomeServer: ObservableObject {
         let scripts = Self.scripts.map { recipe.appendingPathComponent($0).path }
         guard scripts.allSatisfy(FileManager.default.fileExists(atPath:)) else { return }
         try? await rsync(scripts)
-        _ = try? await ssh("\(folder)/home-backup schedule; \(folder)/home-status schedule", quiet: true)
+        let out = try? await ssh("\(folder)/home-backup schedule; \(folder)/home-status schedule; "
+                                 + "test -s \(folder)/storage/dashboard/azeroth.png -a -s \(folder)/storage/dashboard/kalimdor.png && echo maps",
+                                 quiet: true)
+        if let out, !out.contains("maps") { await sendWorldMaps() }
+    }
+
+    /// The dashboard's two world maps, drawn by the game binary from this Mac's game files, as no
+    /// map art ships with the app.
+    private func sendWorldMaps() async {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("world-maps-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        // Without them the page says where they come from; the next refresh tries again.
+        guard (try? await Docker.run(Paths.gameBinary, ["--world-maps", dir.path, Paths.data.path], quiet: true)) != nil,
+              (try? await rsync(["azeroth.png", "kalimdor.png"].map { dir.appendingPathComponent($0).path }, into: "storage/dashboard/")) != nil
+        else { return }
+        _ = try? await ssh("chmod a+r \(folder)/storage/dashboard/*.png", quiet: true)
     }
 
     private func loadBackups() async {
@@ -650,7 +687,7 @@ final class HomeServer: ObservableObject {
     }
 
     @discardableResult
-    private func ssh(_ script: String, stdin: String? = nil, quiet: Bool = false) async throws -> String {
+    func ssh(_ script: String, stdin: String? = nil, quiet: Bool = false) async throws -> String {
         try await Docker.run(URL(fileURLWithPath: "/usr/bin/ssh"), sshOptions + [host, script], stdin: stdin, quiet: quiet)
     }
 
@@ -662,8 +699,13 @@ final class HomeServer: ObservableObject {
     /// not write through a symlink another user owns, as Unraid's exclusive shares are
     /// (`/mnt/user/appdata` -> `../cache/appdata`, owned by nobody).
     private func rsync(_ sources: [String], into sub: String = "") async throws {
-        let real = try await ssh("realpath -e \(folder)", quiet: true)
-        guard real.range(of: #"^/[A-Za-z0-9/._-]+/azeroth-survivors-cmangos$"#, options: .regularExpression) != nil else {
+        try await rsync(sources, to: folder, named: "azeroth-survivors-cmangos", into: sub)
+    }
+
+    /// Copies into `remote`, a folder on the server whose name must be `named`.
+    func rsync(_ sources: [String], to remote: String, named: String, into sub: String = "") async throws {
+        let real = try await ssh("realpath -e \(remote)", quiet: true)
+        guard real.range(of: "^/[A-Za-z0-9/._-]+/\(named)$", options: .regularExpression) != nil else {
             throw ServerError("The server's folder resolves to an unusual path: \(real)")
         }
         try await Docker.run(URL(fileURLWithPath: "/usr/bin/rsync"),

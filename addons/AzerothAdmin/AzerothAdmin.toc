@@ -1,7 +1,7 @@
 ## Interface: 11200
 ## Title: Azeroth|cffff7f00Admin|r
 ## Notes: A game master window for your own vmangos server: levels, gold, cheats, teleports, items, party bots. Needs an administrator account. /aa to open.
-## Author: Azeroth Survivors
+## Author: Hearthside
 ## Version: 1.0
 ## SavedVariablesPerCharacter: AzerothAdminDB
 widgets.lua
