@@ -296,7 +296,7 @@ extension GameProcess.Crash: Equatable {
     static func == (a: Self, b: Self) -> Bool { a.id == b.id }
 }
 
-/// The launcher's key art per mode: `survivors.heic` from the README's screenshot, and Classic's and
+/// The launcher's key art per mode: `survivors.heic` (`macos/survivors.heic`), and Classic's and
 /// Pandaria's when the app was built with them (`macos/art/`), else Survivors'.
 @MainActor
 enum KeyArt {

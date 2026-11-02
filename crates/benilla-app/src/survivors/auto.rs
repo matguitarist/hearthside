@@ -5,7 +5,8 @@
 //! suffix on the class name changes the run, as the fields below say; `:settings` pauses and shows
 //! each tab of Settings, for their screenshots; `:bag` opens the backpack 25 seconds in,
 //! `:merchant` the merchant on the pick screen, `:zones` stands in every zone on the pick screen
-//! before the run, and `:map` opens the world map 20 seconds in.
+//! before the run, `:map` opens the world map 20 seconds in, and `:difficulty` shows the
+//! difficulty dialog before the run (`WOW_SURVIVORS_DIFFICULTY=<n>` sets the run's).
 //! `WOW_SURVIVORS_MAP=<index or name>` picks the battleground, and `WOW_SURVIVORS_LOOT=rich` makes
 //! coins and items drop twenty times as often.
 
@@ -45,24 +46,26 @@ pub(super) struct Auto {
     chars: bool,
     /// `<class>:loading`: hold the boot loading screen up, show it, then quit.
     loading: bool,
+    /// `<class>:difficulty`: show the difficulty dialog before the run.
+    pub(super) difficulty: bool,
     /// Seconds the loading screen has covered the menu, for `:zones`' veil shots.
     veil_t: f32,
     /// `:merchant`: the seconds since the rare elite fell.
     rare_gone: f32,
     frames: u32,
-    wait: f32,
+    pub(super) wait: f32,
     shots: Option<std::path::PathBuf>,
     shot_t: f32,
     shot_n: u32,
     log_t: f32,
     dir: Vec3,
     /// The screens already captured once: the menu, the first level-ups, the results.
-    seen: Vec<String>,
+    pub(super) seen: Vec<String>,
 }
 
 impl Auto {
     /// One screenshot named for this screen, the first time it shows.
-    fn capture_once(&mut self, commands: &mut Commands, name: String) {
+    pub(super) fn capture_once(&mut self, commands: &mut Commands, name: String) {
         if self.seen.contains(&name) {
             return;
         }
@@ -94,6 +97,7 @@ pub(super) fn from_env() -> Option<Auto> {
     let map_shot = mode.eq_ignore_ascii_case("map");
     let chars = mode.eq_ignore_ascii_case("chars");
     let loading = mode.eq_ignore_ascii_case("loading");
+    let difficulty = mode.eq_ignore_ascii_case("difficulty");
     let class = data::CLASSES
         .iter()
         .position(|c| c.name.eq_ignore_ascii_case(name))
@@ -127,6 +131,7 @@ pub(super) fn from_env() -> Option<Auto> {
         map_shot,
         chars,
         loading,
+        difficulty,
         veil_t: 0.0,
         rare_gone: 0.0,
         frames: 0,

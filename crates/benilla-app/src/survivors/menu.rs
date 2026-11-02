@@ -40,10 +40,14 @@ const DIAL_TOWER_H: f32 = 340.0;
 const DIAL_TOP: f32 = 104.0;
 const DIAL_S: f32 = 1.0;
 
-/// The zone rows: the character-select row, compacted so every zone fits the 642-tall frame.
+/// The zone rows: the character-select row, compacted so every zone fits the frame and the
+/// Difficulty button fits under it ([`super::difficulty`]).
 const ROW_TOP: f32 = 44.0;
-const ROW_PITCH: f32 = 36.0;
-const ROW_H: f32 = 34.0;
+const ROW_PITCH: f32 = 34.0;
+const ROW_H: f32 = 33.0;
+const ZONE_FRAME_TOP: f32 = 15.0;
+const ZONE_FRAME_H: f32 = 612.0;
+pub(super) const ZONE_FRAME_BOTTOM: f32 = ZONE_FRAME_TOP + ZONE_FRAME_H;
 const ROW_W: f32 = 228.0;
 
 #[derive(Component, Clone, Copy, PartialEq, Eq, Debug)]
@@ -1388,9 +1392,9 @@ fn zone_frame(ui: &mut ChildSpawnerCommands, art: &GlueArt, f: &Handle<Font>, pr
         Node {
             position_type: PositionType::Absolute,
             right: px(5.0),
-            top: px(15.0),
+            top: px(ZONE_FRAME_TOP),
             width: px(260.0),
-            height: px(642.0),
+            height: px(ZONE_FRAME_H),
             ..default()
         },
     ))

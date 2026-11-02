@@ -10,11 +10,13 @@ mod bag;
 mod levelup;
 mod cards;
 mod data;
+mod difficulty;
 mod enemies;
 mod fill;
 mod gear;
 mod grade;
 mod hero;
+mod hide_ui;
 mod hud;
 mod menu;
 mod merchant;
@@ -53,6 +55,8 @@ impl Plugin for SurvivorsPlugin {
         }
         app.insert_resource(crate::run_mode::CaptureMode)
             .add_plugins(grade::plugin)
+            .add_plugins(hide_ui::plugin)
+            .add_plugins(difficulty::plugin)
             .init_state::<Phase>()
             .init_resource::<Rng>()
             .init_resource::<Selection>()
@@ -274,6 +278,8 @@ pub(super) struct Selection {
     /// has rested a moment ([`menu::stage_follows_pick`]), behind a veil rather than the loading
     /// screen, so the hero stands in the zone picked.
     pub stage: usize,
+    /// The difficulty picked for `map` ([`difficulty`]), within what the character has open.
+    pub difficulty: u8,
     /// Bumped on every change, so the menu rebuilds once.
     pub version: u32,
 }
@@ -395,6 +401,12 @@ pub(super) struct Run {
     pub banished: Vec<&'static str>,
     /// The next card picked is banished rather than taken.
     pub banishing: bool,
+    /// The run's difficulty ([`difficulty`]) and the week's affixes it brings.
+    pub difficulty: u8,
+    pub affixes: Vec<difficulty::Affix>,
+    pub affix: difficulty::AffixState,
+    /// At the results: the difficulty this run's win opened, if it opened one.
+    pub raised: Option<u8>,
 }
 
 impl Default for Run {
@@ -440,6 +452,10 @@ impl Default for Run {
             banishes: 0,
             banished: Vec::new(),
             banishing: false,
+            difficulty: 0,
+            affixes: Vec::new(),
+            affix: difficulty::AffixState::default(),
+            raised: None,
         }
     }
 }

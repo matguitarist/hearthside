@@ -658,8 +658,9 @@ pub(crate) fn bonus(
         .fold((0.0, 0.0), |(m, h), r| (m + 0.01 * r, h + 0.015 * r))
 }
 
-/// The set a zone's bosses drop: by the zone's level, scaled to the sets the class has.
-fn zone_set(class: u8, map: usize) -> usize {
+/// The set a zone's bosses drop: by the zone's level and the difficulty's bump
+/// ([`super::difficulty::tier_bump`]), scaled to the sets the class has.
+fn zone_set(class: u8, map: usize, difficulty: u8) -> usize {
     let lo = super::profile::zone_order()
         .iter()
         .find(|z| z.map == map)
@@ -670,11 +671,13 @@ fn zone_set(class: u8, map: usize) -> usize {
         36..=52 => 2,
         _ => 3,
     };
+    let tier = (tier + super::difficulty::tier_bump(difficulty)).min(3);
     let n = sets(class).len().max(1);
     tier * (n - 1) / 3
 }
 
-/// Every boss has a one-in-two chance to drop a piece of the class's armor, the run's last boss
+/// Every boss has a chance to drop a piece of the class's armor, one in two on Normal and more on
+/// harder difficulties ([`super::difficulty::armor_chance`]), the run's last boss
 /// always: a piece of the zone's set not owned yet, else of a weaker set. It is the profile's at
 /// once, worn at once if it beats what the slot has, and named in the banner and the results.
 #[allow(clippy::too_many_arguments)]
@@ -694,11 +697,11 @@ pub(crate) fn boss_drops(
         }
         run.boss_kills += 1;
         let last = run.boss_kills as usize >= data::roster(selection.stage).bosses.len();
-        if !last && rng.f32() >= 0.5 {
+        if !last && rng.f32() >= super::difficulty::armor_chance(run.difficulty) {
             continue;
         }
         let class = run.class.id;
-        let top = zone_set(class, selection.stage);
+        let top = zone_set(class, selection.stage, run.difficulty);
         let piece = (0..=top).rev().find_map(|set| {
             let open: Vec<&Piece> = catalog
                 .for_class(class)
@@ -734,11 +737,19 @@ mod tests {
     #[test]
     fn zones_drop_sets_by_level_scaled_to_the_class() {
         // A warrior has a dungeon set and three raid tiers, a rogue only the raid tiers.
-        assert_eq!(zone_set(1, map("Elwynn Forest")), 0);
-        assert_eq!(zone_set(1, map("Duskwood")), 1);
-        assert_eq!(zone_set(1, map("Naxxramas")), 3);
-        assert_eq!(zone_set(4, map("Elwynn Forest")), 0);
-        assert_eq!(zone_set(4, map("Naxxramas")), 2);
+        assert_eq!(zone_set(1, map("Elwynn Forest"), 0), 0);
+        assert_eq!(zone_set(1, map("Duskwood"), 0), 1);
+        assert_eq!(zone_set(1, map("Naxxramas"), 0), 3);
+        assert_eq!(zone_set(4, map("Elwynn Forest"), 0), 0);
+        assert_eq!(zone_set(4, map("Naxxramas"), 0), 2);
+    }
+
+    #[test]
+    fn harder_difficulties_drop_stronger_sets() {
+        assert_eq!(zone_set(1, map("Elwynn Forest"), 1), 1);
+        assert_eq!(zone_set(1, map("Elwynn Forest"), 2), 2);
+        assert_eq!(zone_set(1, map("Elwynn Forest"), 10), 3);
+        assert_eq!(zone_set(1, map("Naxxramas"), 20), 3);
     }
 
     #[test]

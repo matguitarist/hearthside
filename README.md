@@ -42,6 +42,10 @@ same CMaNGOS set up and managed over SSH on a home server, or on one at an addre
   genders, every class the race can be, and **sixteen zones**, from the starting zones to
   Naxxramas and the Gates of Ahn'Qiraj. Each zone fights with its own creatures and bosses, taken
   from the zone's real spawns. Your pick is remembered across reloads.
+- **Difficulties, Mythic+ style:** Normal, Heroic, then keystone levels +2 to +20 in each zone,
+  each opened by winning the one before. Harder runs pay more coin and better armor; from +2 the
+  week's affixes join in (Fortified or Tyrannical, then Bolstering, Raging, Sanguine or Bursting at
+  +4, and Volcanic, Explosive, Quaking or Grievous at +7), turning over every Tuesday.
 - **Level-up cards** that deal in, tilt toward the cursor and lift on hover. Their WoW item-quality
   colour says how strong a pick is, and each card lists exactly what changes, like
   `Damage 20 » 26` or `Targets 2 » 3`.

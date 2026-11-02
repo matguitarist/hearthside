@@ -56,6 +56,7 @@ enum HelpTopic: String, CaseIterable, Identifiable {
              .bullets(["**Level up:** three cards are dealt. Their colour, as WoW's item quality, says how strong a pick is, and each lists exactly what changes. Press **1**, **2** or **3**, or click one.",
                        "**From level 5:** your class's movement spell on **F**, aimed at the cursor: Blink, Charge, Sprint, Dash, Fade, Ghost Wolf, Aspect of the Cheetah, Blessing of Freedom, Howl of Terror.",
                        "**Sixteen zones,** from the starting zones to Naxxramas and the Gates of Ahn'Qiraj, each with its own creatures and bosses.",
+                       "**Difficulty,** the button under the zones: Normal, then Heroic, then Mythic +2 to +20, each opened by winning the one before in that zone. Harder runs bring home more coin, and their bosses drop armor more often and from stronger sets. From +2 the week's affixes join in, as in Mythic+: Fortified or Tyrannical, a second at +4 and a third at +7, new every Tuesday.",
                        "**The camera** is locked top-down, the hero facing the cursor. **C** frees it to swing and tilt; the wheel zooms."]),
              .p("Your picks are remembered between runs. See **Survivors Controls** for every key.")]
         case .controls:
@@ -66,6 +67,7 @@ enum HelpTopic: String, CaseIterable, Identifiable {
                     ("Mouse wheel", "Zoom, from over the shoulder out to 70 yards"),
                     ("Drag", "Swing and tilt the camera, while it is unlocked"),
                     ("G", "Picture polish on or off"),
+                    ("⌥ Option-Z", "Hide or show the interface, for a clean screenshot"),
                     ("1, 2, 3", "Pick an upgrade at a level up (or click a card)"),
                     ("Esc", "Pause and resume"),
                     ("Enter", "Start the run from the menu; back to the menu after a game over")]),

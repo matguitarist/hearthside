@@ -3,7 +3,7 @@ import SwiftUI
 
 /// The panes of Settings, in its sidebar.
 enum SettingsPane: String, CaseIterable, Identifiable {
-    case general, graphics, sound, server, homeServer, homeGame, homeMaintenance, pandaria, advanced
+    case general, graphics, sound, survivors, server, homeServer, homeGame, homeMaintenance, pandaria, advanced
 
     var id: String { rawValue }
 
@@ -12,6 +12,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .general: "General"
         case .graphics: "Graphics"
         case .sound: "Sound"
+        case .survivors: "Survivors"
         case .server: "Server on This Mac"
         case .homeServer: "Home Server"
         case .homeGame: "Bots & Rates"
@@ -26,6 +27,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .general: "gearshape"
         case .graphics: "display"
         case .sound: "speaker.wave.2"
+        case .survivors: "flame"
         case .server: "desktopcomputer"
         case .homeServer: "house"
         case .homeGame: "person.2"
@@ -37,6 +39,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
 
     static let sections: [(String?, [SettingsPane])] = [
         (nil, [.general, .graphics, .sound]),
+        ("Azeroth Survivors", [.survivors]),
         ("Classic servers", [.server, .homeServer, .homeGame, .homeMaintenance]),
         ("Mists of Pandaria", [.pandaria]),
         (nil, [.advanced]),
@@ -95,6 +98,7 @@ struct SettingsView: View {
         case .general: GeneralSettings()
         case .graphics: GraphicsSettings()
         case .sound: SoundSettings()
+        case .survivors: SurvivorsSettings()
         case .server: ServerSettings()
         case .homeServer: HomeServerSettings()
         case .homeGame: HomeGameSettings()

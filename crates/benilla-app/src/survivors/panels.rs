@@ -581,7 +581,7 @@ pub(super) fn build_panels(
 }
 
 /// What each input does in a run, as the Key Bindings panel lists them.
-const CONTROLS: [(&str, &str); 10] = [
+const CONTROLS: [(&str, &str); 11] = [
     ("Move", "W A S D / Arrows"),
     ("Run forward", "Both mouse buttons"),
     ("Jump", "Space"),
@@ -591,6 +591,7 @@ const CONTROLS: [(&str, &str); 10] = [
     ("Zoom", "Mouse wheel"),
     ("Pick a level-up card", "1  2  3"),
     ("World map", "M"),
+    ("Hide interface", "Alt Z"),
     ("Pause", "Escape"),
 ];
 

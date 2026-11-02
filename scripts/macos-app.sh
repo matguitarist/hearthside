@@ -117,14 +117,11 @@ find "$APP/Contents/Resources/Server" -name __pycache__ -prune -exec rm -rf {} +
 # Classic's shipped addons, installed into the game's AddOns folder by `Addons.swift`.
 ditto addons "$APP/Contents/Resources/AddOns"
 
-# Key art and icon from the README's screenshots.
+# Survivors' key art, a 1920×1080 HEIC of a run with its HUD hidden (Alt-Z); the icon from the
+# README's screenshot.
+cp macos/survivors.heic "$APP/Contents/Resources/"
 shot=docs/screenshots/combat.jpg
-# The key art drops the screenshot's top fifth, where its HUD (timer, minimap) is.
 tmp="$(mktemp -d)"
-sw=$(sips -g pixelWidth "$shot" | awk '/pixelWidth/ {print $2}')
-sh=$(sips -g pixelHeight "$shot" | awk '/pixelHeight/ {print $2}')
-sips -c $((sh * 4 / 5)) "$sw" --cropOffset $((sh / 5)) 0 "$shot" --out "$tmp/art.jpg" >/dev/null
-sips -s format heic -s formatOptions 70 -Z 1640 "$tmp/art.jpg" --out "$APP/Contents/Resources/survivors.heic" >/dev/null
 # Classic's and Pandaria's, Blizzard's key art, kept out of the repository: from `macos/art/`
 # when this Mac has them (classic.heic, pandaria.heic), else those modes show Survivors'.
 for art in macos/art/*.heic; do [ ! -f "$art" ] || cp "$art" "$APP/Contents/Resources/"; done

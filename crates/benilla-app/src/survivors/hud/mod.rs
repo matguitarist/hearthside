@@ -452,6 +452,11 @@ pub(super) fn setup_hud(
                         line.spawn((LevelText, text(f, "Level 1", 14.0, GOLD)));
                         line.spawn((KillText, text(f, "Kills 0", 14.0, Color::WHITE)));
                     });
+                    col.spawn((
+                        super::difficulty::AffixText,
+                        text(f, "", 13.0, Color::srgb(1.0, 0.5, 0.25)),
+                        Visibility::Hidden,
+                    ));
                 });
                 // The minimap cluster's column.
                 row.spawn(Node {
@@ -784,6 +789,8 @@ pub(super) fn start_run(run: &mut Run, selection: &mut Selection) -> bool {
         race,
         next_guid,
         ranks,
+        difficulty: selection.difficulty,
+        affixes: super::difficulty::active(selection.difficulty, super::difficulty::week()),
         ..Run::default()
     };
     run.rerolls = super::merchant::rerolls(&ranks);

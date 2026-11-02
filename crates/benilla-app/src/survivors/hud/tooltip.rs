@@ -128,6 +128,15 @@ pub(in crate::survivors) fn refresh_results(
         (true, None) => selection.map_def().victory.to_string(),
         (false, _) => "The horde was too much this time.".to_string(),
     };
+    let stats_line = match (run.difficulty, run.raised) {
+        (0, None) => stats_line,
+        (d, None) => format!("{}: {stats_line}", super::super::difficulty::name(d)),
+        (d, Some(open)) => format!(
+            "{}: {stats_line}  {} is open.",
+            super::super::difficulty::name(d),
+            super::super::difficulty::name(open)
+        ),
+    };
     let stats_line = if run.loot.is_empty() {
         stats_line
     } else {
@@ -135,11 +144,20 @@ pub(in crate::survivors) fn refresh_results(
         format!("{stats_line}  Loot: {}.", names.join(", "))
     };
     let stats_line = if run.earned > 0 {
+        let coins = run.bag.copper + run.bag.worth();
+        let bonus = if run.earned > coins {
+            format!(
+                ", {} more for the difficulty",
+                super::super::bag::money(run.earned - coins)
+            )
+        } else {
+            String::new()
+        };
         format!(
-            "{stats_line}  Earned {} (looted {}, the bag sold for {}).",
+            "{stats_line}  Earned {} (looted {}, the bag sold for {}{bonus}).",
             super::super::bag::money(run.earned),
             super::super::bag::money(run.bag.copper),
-            super::super::bag::money(run.earned - run.bag.copper)
+            super::super::bag::money(coins - run.bag.copper)
         )
     } else {
         stats_line

@@ -104,7 +104,7 @@ fn radius_for(def: &EnemyDef) -> f32 {
     (if def.big { 1.3 } else { 0.6 }) * def.scale
 }
 
-fn spawn_enemy(
+pub(super) fn spawn_enemy(
     commands: &mut Commands,
     run: &mut Run,
     def: &'static EnemyDef,
@@ -112,8 +112,9 @@ fn spawn_enemy(
     hero: Vec3,
     boss: bool,
     rare: bool,
-) {
+) -> Entity {
     let scale = data::hp_scale(run.elapsed);
+    let (hard_hp, hard_dmg) = super::difficulty::enemy_scale(run, boss);
     let serial = run.guid();
     let size = if rare { 1.5 } else { 1.0 };
     let e = units::spawn_unit(
@@ -131,7 +132,7 @@ fn spawn_enemy(
         pos,
         yaw_toward(hero - pos),
     );
-    let hp = def.hp * scale * if rare { 15.0 } else { 1.0 };
+    let hp = def.hp * scale * hard_hp * if rare { 15.0 } else { 1.0 };
     let mut marks = Marks::debuffs();
     if rare {
         marks.add(RARE_AURA, f32::INFINITY);
@@ -142,7 +143,10 @@ fn spawn_enemy(
             hp,
             max_hp: hp,
             speed: def.speed * if rare { 1.1 } else { 1.0 },
-            damage: def.damage * data::damage_scale(run.elapsed) * if rare { 1.8 } else { 1.0 },
+            damage: def.damage
+                * data::damage_scale(run.elapsed)
+                * hard_dmg
+                * if rare { 1.8 } else { 1.0 },
             radius: radius_for(def) * size,
             xp: def.xp * if rare { 10 } else { 1 },
             boss,
@@ -160,6 +164,7 @@ fn spawn_enemy(
         },
         marks,
     ));
+    e
 }
 
 fn ground(world: &WorldPoint, mut p: Vec3, fallback: f32) -> Vec3 {

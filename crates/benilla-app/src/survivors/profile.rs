@@ -10,8 +10,9 @@
 //! Saved as `benilla-config/survivors-profile.txt`, one record per tab-separated line:
 //! `copper\tamount`, `upgrade\tkey\trank` and `current\tname` for the account, then each character
 //! as a `char\tname\tclass\trace\tsex\tskin\tface\thair style\thair color\tfacial hair\tmap` line
-//! followed by its own zones, `name\twins\truns\tbest_secs\tbest_kills` (keyed by name so a
-//! reordered or extended [`data::MAPS`] keeps every record), and pieces, `gear\tclass\tset\tslot`.
+//! followed by its own zones, `name\twins\truns\tbest_secs\tbest_kills\tcleared\tpick` (keyed by
+//! name so a reordered or extended [`data::MAPS`] keeps every record; a line from before
+//! difficulties has no `cleared` or `pick`), and pieces, `gear\tclass\tset\tslot`.
 //! A save from before characters has its zones and pieces at the top with no `char` line; they
 //! become the first character, with the hero of the old `survivors-pick.txt`.
 
@@ -39,6 +40,11 @@ pub(super) struct ZoneRecord {
     pub runs: u32,
     pub best_secs: u32,
     pub best_kills: u32,
+    /// One past the hardest difficulty won here ([`super::difficulty`]): 0 none, 1 Normal, 2
+    /// Heroic, `n + 1` Mythic +n. It is also the hardest difficulty open.
+    pub cleared: u8,
+    /// The difficulty last picked for the zone.
+    pub pick: u8,
 }
 
 /// One hero: who they are, how they look, where they last fought, and what they have won.
@@ -177,12 +183,23 @@ impl Profile {
                             target.gear.insert((class, set, slot));
                         }
                     } else if let Some(i) = data::MAPS.iter().position(|m| m.name == name) {
-                        let mut n = || f.next().and_then(|v| v.parse().ok()).unwrap_or(0);
+                        let mut n = || f.next().and_then(|v| v.parse().ok());
+                        let (wins, runs, best_secs, best_kills) = (
+                            n().unwrap_or(0),
+                            n().unwrap_or(0),
+                            n().unwrap_or(0),
+                            n().unwrap_or(0),
+                        );
+                        // Before difficulties every win was on Normal.
+                        let cleared = n().map_or(u8::from(wins > 0), |c: u32| c as u8);
+                        let pick = n().unwrap_or(0) as u8;
                         target.zones[i] = ZoneRecord {
-                            wins: n(),
-                            runs: n(),
-                            best_secs: n(),
-                            best_kills: n(),
+                            wins,
+                            runs,
+                            best_secs,
+                            best_kills,
+                            cleared: cleared.min(super::difficulty::MAX + 1),
+                            pick: pick.min(cleared.min(super::difficulty::MAX)),
                         };
                     }
                 }
@@ -261,8 +278,8 @@ impl Profile {
             ));
             for (m, r) in data::MAPS.iter().zip(&c.zones).filter(|(_, r)| r.runs > 0) {
                 text.push_str(&format!(
-                    "{}\t{}\t{}\t{}\t{}\n",
-                    m.name, r.wins, r.runs, r.best_secs, r.best_kills
+                    "{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
+                    m.name, r.wins, r.runs, r.best_secs, r.best_kills, r.cleared, r.pick
                 ));
             }
             for (class, set, slot) in &c.gear {
@@ -418,6 +435,36 @@ impl Profile {
         self.lock(map).is_none()
     }
 
+    /// The character's record for `map`, if there is a character.
+    pub fn zone(&self, map: usize) -> Option<&ZoneRecord> {
+        self.hero().and_then(|c| c.zones.get(map))
+    }
+
+    /// The hardest difficulty open in `map`: winning a difficulty opens the next.
+    pub fn top_difficulty(&self, map: usize) -> u8 {
+        self.zone(map)
+            .map_or(0, |r| r.cleared)
+            .min(super::difficulty::MAX)
+    }
+
+    /// The difficulty last picked for `map`, within what is open.
+    pub fn picked_difficulty(&self, map: usize) -> u8 {
+        self.zone(map)
+            .map_or(0, |r| r.pick)
+            .min(self.top_difficulty(map))
+    }
+
+    /// Remember the difficulty picked for `map`.
+    pub fn set_difficulty(&mut self, map: usize, d: u8) {
+        let d = d.min(self.top_difficulty(map));
+        if let Some(r) = self.hero_mut().and_then(|c| c.zones.get_mut(map)) {
+            if r.pick != d {
+                r.pick = d;
+                self.save();
+            }
+        }
+    }
+
     /// Buy the next rank of the `i`th upgrade; false at the top rank or short of coin.
     pub fn buy(&mut self, i: usize) -> bool {
         let u = &super::merchant::UPGRADES[i];
@@ -441,6 +488,9 @@ impl Profile {
             r.wins += u32::from(run.won);
             r.best_secs = r.best_secs.max(run.elapsed as u32);
             r.best_kills = r.best_kills.max(run.kills);
+            if run.won {
+                r.cleared = r.cleared.max(run.difficulty + 1);
+            }
         }
         self.copper += run.earned;
         self.version += 1;
@@ -572,10 +622,14 @@ pub(super) fn record_run(
     mut run: ResMut<Run>,
     selection: Res<Selection>,
 ) {
-    // The coins picked up, and the bag and the worn pieces sold.
-    run.earned = run.bag.copper + run.bag.worth();
+    // The coins picked up, and the bag and the worn pieces sold, more on a harder difficulty.
+    let coins = run.bag.copper + run.bag.worth();
+    run.earned = (coins as f64 * f64::from(super::difficulty::coin_mult(run.difficulty))) as u64;
+    let top = profile.top_difficulty(selection.stage);
     let opened = profile.record(selection.stage, &run);
     run.opened = opened;
+    let now = profile.top_difficulty(selection.stage);
+    run.raised = (now > top).then_some(now);
 }
 
 #[cfg(test)]
@@ -752,5 +806,44 @@ mod tests {
         assert!(c.gear.contains(&(8, 1, 0)));
         assert!(q.refuse(&c.name.clone()).is_some() && valid_name(&c.name));
         assert_eq!(q.copper, 7);
+    }
+
+    #[test]
+    fn each_win_opens_the_next_difficulty() {
+        let mut p = account();
+        let map = zone_order()[0].map;
+        assert_eq!(p.top_difficulty(map), 0);
+        let mut play = |p: &mut Profile, difficulty: u8, won: bool| {
+            p.record(
+                map,
+                &Run {
+                    won,
+                    difficulty,
+                    ..Run::default()
+                },
+            );
+        };
+        play(&mut p, 0, true);
+        assert_eq!(p.top_difficulty(map), 1);
+        play(&mut p, 1, true);
+        assert_eq!(p.top_difficulty(map), 2);
+        // A loss keeps the keystone where it was; an easier win takes nothing away.
+        play(&mut p, 2, false);
+        play(&mut p, 0, true);
+        assert_eq!(p.top_difficulty(map), 2);
+        p.set_difficulty(map, 9);
+        assert_eq!(p.picked_difficulty(map), 2);
+
+        // Saved and read back, the record and the pick hold; a line from before difficulties
+        // counts its wins as Normal.
+        let mut q = Profile::empty();
+        q.parse(&format!(
+            "char\tThrall\t0\t2\t0\t0\t0\t0\t0\t0\t0\n{}\t3\t5\t900\t400\t3\t2\n{}\t1\t1\t900\t400\n",
+            data::MAPS[map].name,
+            data::MAPS[(map + 1) % data::MAPS.len()].name
+        ));
+        assert_eq!(q.top_difficulty(map), 3);
+        assert_eq!(q.picked_difficulty(map), 2);
+        assert_eq!(q.top_difficulty((map + 1) % data::MAPS.len()), 1);
     }
 }
