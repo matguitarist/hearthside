@@ -1,5 +1,7 @@
 //! The hero: its body, WASD movement over the terrain, the top-down camera, and its health.
 
+use avian3d::prelude::{Collider, MoveAndSlideConfig, MoveAndSlideHitResponse};
+use benilla_world::collision::WorldCollision;
 use benilla_world::view::WorldCamera;
 use benilla_world::world_point::WorldPoint;
 use bevy::input::mouse::{AccumulatedMouseMotion, MouseScrollUnit, MouseWheel};
@@ -228,6 +230,7 @@ pub(super) fn drive_hero(
     rig: Res<CamRig>,
     aim: Res<AimPoint>,
     world: WorldPoint,
+    collision: WorldCollision,
     auto: Option<Res<super::auto::Auto>>,
     mut player: ResMut<crate::player::Player>,
     mut hero: Query<(&mut Transform, &mut MovementState, &mut Hero)>,
@@ -292,7 +295,7 @@ pub(super) fn drive_hero(
             if dir != Vec3::ZERO && dt > 0.0 {
                 let dir = dir.normalize();
                 let speed = run.stats().speed * run.haste_mult();
-                pos += dir * speed * dt;
+                pos = slide(&collision, pos, dir * speed, dt);
                 mv.speed = speed;
                 mv.flags = match face {
                     Some(look) => gait(look, dir),
@@ -360,6 +363,27 @@ pub(super) fn drive_hero(
     player.settling = false;
     player.world_stale = false;
     player.pos = focus;
+}
+
+/// Where a run of `vel` for `dt` from `feet` ends, sliding along trees, walls and houses. The body
+/// sweeps level, its foot a step above the ground, so slopes and kerbs never stop it; the caller
+/// sets the height from the terrain.
+fn slide(collision: &WorldCollision, feet: Vec3, vel: Vec3, dt: f32) -> Vec3 {
+    use crate::player::{CAPSULE_HEIGHT, CAPSULE_RADIUS, STEP_UP_HEIGHT};
+    let body = Collider::capsule(CAPSULE_RADIUS, CAPSULE_HEIGHT - 2.0 * CAPSULE_RADIUS);
+    let lift = Vec3::Y * (STEP_UP_HEIGHT + CAPSULE_HEIGHT * 0.5);
+    let out = collision.slide_body(
+        &body,
+        feet + lift,
+        vel,
+        std::time::Duration::from_secs_f32(dt),
+        &MoveAndSlideConfig::default(),
+        |hit| {
+            hit.velocity.y = 0.0;
+            MoveAndSlideHitResponse::Accept
+        },
+    );
+    Vec3::new(out.position.x, feet.y, out.position.z)
 }
 
 /// Let go of the mouse buttons when the page loses focus or the pointer leaves it. A release that

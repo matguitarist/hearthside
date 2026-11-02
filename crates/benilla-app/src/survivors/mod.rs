@@ -25,6 +25,8 @@ mod mobility;
 mod pad;
 mod panels;
 mod profile;
+mod talents;
+mod achievements;
 mod units;
 mod postcard;
 mod worldmap;
@@ -57,6 +59,8 @@ impl Plugin for SurvivorsPlugin {
             .add_plugins(grade::plugin)
             .add_plugins(hide_ui::plugin)
             .add_plugins(difficulty::plugin)
+            .add_plugins(talents::plugin)
+            .add_plugins(achievements::plugin)
             .init_state::<Phase>()
             .init_resource::<Rng>()
             .init_resource::<Selection>()
@@ -303,22 +307,29 @@ pub(super) struct Owned {
     pub def: &'static AbilityDef,
     pub level: u8,
     pub cd: f32,
+    /// What the character's talents add to it.
+    pub bonus: talents::Bonus,
 }
 
 impl Owned {
     pub fn damage_mult(&self) -> f32 {
-        1.0 + 0.3 * f32::from(self.level - 1)
+        (1.0 + 0.3 * f32::from(self.level - 1)) * (1.0 + self.bonus.dmg)
     }
     pub fn cooldown(&self, stats: &Stats) -> f32 {
-        let base = self.def.cooldown * 0.93f32.powi(i32::from(self.level) - 1);
+        let base = self.def.cooldown
+            * 0.93f32.powi(i32::from(self.level) - 1)
+            * (1.0 - self.bonus.cd).max(0.5);
         (base * (1.0 - stats.haste).max(0.35)).max(0.2)
     }
     pub fn count(&self) -> u32 {
         let extra = [3u8, 5, 7].iter().filter(|&&l| self.level >= l).count() as u32;
-        self.def.count + extra
+        self.def.count + extra + self.bonus.count
     }
     pub fn radius(&self, stats: &Stats) -> f32 {
-        self.def.radius * (1.0 + 0.08 * f32::from(self.level - 1)) * stats.area
+        self.def.radius
+            * (1.0 + 0.08 * f32::from(self.level - 1))
+            * (1.0 + self.bonus.area)
+            * stats.area
     }
     pub fn duration(&self) -> f32 {
         self.def.duration * (1.0 + 0.1 * f32::from(self.level - 1))
@@ -392,6 +403,8 @@ pub(super) struct Run {
     pub earned: u64,
     /// The merchant's upgrades, as bought when the run began.
     pub ranks: merchant::Ranks,
+    /// The character's talents, as learned when the run began.
+    pub talents: talents::Picked,
     /// The run time the next rare elite shows; 0 until the first is rolled.
     pub next_rare: f32,
     /// Level-up rerolls and banishes left, from the merchant's Fortune and Banishment.
@@ -447,6 +460,7 @@ impl Default for Run {
             bag: bag::Bag::default(),
             earned: 0,
             ranks: [0; merchant::UPGRADES.len()],
+            talents: [0; talents::SLOTS],
             next_rare: 0.0,
             rerolls: 0,
             banishes: 0,
@@ -487,6 +501,7 @@ impl Run {
         }
         self.bag.apply(&mut s);
         merchant::apply(&self.ranks, &mut s);
+        talents::apply(self.class.id, &self.talents, &mut s);
         s
     }
 

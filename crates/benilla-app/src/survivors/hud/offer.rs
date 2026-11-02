@@ -109,11 +109,10 @@ pub(in crate::survivors) fn pick(
         return;
     };
     match choice {
-        Choice::NewAbility(def) => run.abilities.push(Owned {
-            def,
-            level: 1,
-            cd: 0.3,
-        }),
+        Choice::NewAbility(def) => {
+            let o = run.own(def, 0.3);
+            run.abilities.push(o);
+        }
         Choice::Upgrade(k) => run.abilities[k].level += 1,
         Choice::NewPassive(p) => run.passives.push((p, 1)),
         Choice::UpPassive(k) => run.passives[k].1 += 1,
@@ -149,7 +148,7 @@ pub(in crate::survivors) fn describe_card(
     match choice {
         Choice::NewAbility(def) => {
             let stats = run.stats();
-            let c = cast_at(def, 1, &stats);
+            let c = cast_at(def, 1, &stats, run.own(def, 0.0).bonus);
             CardText {
                 spell: def.spell,
                 name: spell_name(spells, def.spell, def.key),
@@ -164,8 +163,8 @@ pub(in crate::survivors) fn describe_card(
             let next = o.level + 1;
             let stats = run.stats();
             let (a, b) = (
-                cast_at(o.def, o.level, &stats),
-                cast_at(o.def, next, &stats),
+                cast_at(o.def, o.level, &stats, o.bonus),
+                cast_at(o.def, next, &stats, o.bonus),
             );
             // What actually changes, as before → after.
             let mut lines = Vec::new();

@@ -8,11 +8,13 @@
 //! zone has.
 //!
 //! Saved as `benilla-config/survivors-profile.txt`, one record per tab-separated line:
-//! `copper\tamount`, `upgrade\tkey\trank` and `current\tname` for the account, then each character
+//! `copper\tamount`, `upgrade\tkey\trank`, `achievement\tkey`, `kills\ttotal` and `current\tname`
+//! for the account, then each character
 //! as a `char\tname\tclass\trace\tsex\tskin\tface\thair style\thair color\tfacial hair\tmap` line
 //! followed by its own zones, `name\twins\truns\tbest_secs\tbest_kills\tcleared\tpick` (keyed by
 //! name so a reordered or extended [`data::MAPS`] keeps every record; a line from before
-//! difficulties has no `cleared` or `pick`), and pieces, `gear\tclass\tset\tslot`.
+//! difficulties has no `cleared` or `pick`), pieces, `gear\tclass\tset\tslot`, and talents,
+//! `talent\tspell\trank` (keyed by the talent's spell, [`super::talents`]).
 //! A save from before characters has its zones and pieces at the top with no `char` line; they
 //! become the first character, with the hero of the old `survivors-pick.txt`.
 
@@ -62,6 +64,8 @@ pub(super) struct Character {
     pub zones: Vec<ZoneRecord>,
     /// Owned armor, `(class id, set, slot index)`.
     pub gear: BTreeSet<(u8, u8, u8)>,
+    /// Talent ranks, indexed like the class's trees ([`super::talents`]).
+    pub talents: super::talents::Picked,
 }
 
 impl Character {
@@ -75,6 +79,7 @@ impl Character {
             map,
             zones: vec![ZoneRecord::default(); data::MAPS.len()],
             gear: BTreeSet::new(),
+            talents: [0; super::talents::SLOTS],
         }
     }
 
@@ -93,6 +98,9 @@ pub(super) struct Profile {
     pub copper: u64,
     /// The merchant's upgrades bought, shared by every character.
     pub ranks: super::merchant::Ranks,
+    /// Achievements earned ([`super::achievements`]), by key, and enemies slain over every run.
+    pub achieved: BTreeSet<&'static str>,
+    pub kills: u64,
     /// Bumped on every change to what the menu lists, so it rebuilds once.
     pub version: u32,
 }
@@ -121,12 +129,14 @@ fn pick_path() -> Option<std::path::PathBuf> {
 }
 
 impl Profile {
-    fn empty() -> Self {
+    pub(super) fn empty() -> Self {
         Self {
             chars: Vec::new(),
             current: None,
             copper: 0,
             ranks: [0; super::merchant::UPGRADES.len()],
+            achieved: BTreeSet::new(),
+            kills: 0,
             version: 0,
         }
     }
@@ -148,6 +158,13 @@ impl Profile {
                     }
                 }
                 "current" => current = f.next().map(str::to_string),
+                "achievement" => {
+                    if let Some(i) = f.next().and_then(super::achievements::index) {
+                        self.achieved
+                            .insert(super::achievements::ACHIEVEMENTS[i].key);
+                    }
+                }
+                "kills" => self.kills = f.next().and_then(|v| v.parse().ok()).unwrap_or(0),
                 "char" => {
                     let Some(name) = f.next().filter(|n| valid_name(n)) else {
                         continue;
@@ -177,7 +194,19 @@ impl Profile {
                             Character::new(String::new(), 0, 1, 0, Custom::default(), 0)
                         }),
                     };
-                    if name == "gear" {
+                    if name == "talent" {
+                        // Keyed by the talent's spell, so a reordered tree keeps every rank.
+                        let v: Vec<u32> = f.filter_map(|v| v.parse().ok()).collect();
+                        let class = data::CLASSES[target.class].id;
+                        if let [spell, rank] = v[..] {
+                            if let Some(i) = (0..super::talents::SLOTS)
+                                .find(|&i| super::talents::talent(class, i).spell == spell)
+                            {
+                                let max = super::talents::talent(class, i).ranks;
+                                target.talents[i] = (rank as u8).min(max);
+                            }
+                        }
+                    } else if name == "gear" {
                         let v: Vec<u8> = f.filter_map(|v| v.parse().ok()).collect();
                         if let [class, set, slot] = v[..] {
                             target.gear.insert((class, set, slot));
@@ -248,7 +277,7 @@ impl Profile {
     }
 
     /// Write the save; false when it could not be.
-    fn save(&self) -> bool {
+    pub(super) fn save(&self) -> bool {
         let mut text = String::new();
         if self.copper > 0 {
             text.push_str(&format!("copper\t{}\n", self.copper));
@@ -257,6 +286,12 @@ impl Profile {
             if r > 0 {
                 text.push_str(&format!("upgrade\t{}\t{r}\n", u.key));
             }
+        }
+        for key in &self.achieved {
+            text.push_str(&format!("achievement\t{key}\n"));
+        }
+        if self.kills > 0 {
+            text.push_str(&format!("kills\t{}\n", self.kills));
         }
         if let Some(c) = self.hero() {
             text.push_str(&format!("current\t{}\n", c.name));
@@ -285,6 +320,11 @@ impl Profile {
             for (class, set, slot) in &c.gear {
                 text.push_str(&format!("gear\t{class}\t{set}\t{slot}\n"));
             }
+            let class = data::CLASSES[c.class].id;
+            for (i, &r) in c.talents.iter().enumerate().filter(|(_, r)| **r > 0) {
+                let spell = super::talents::talent(class, i).spell;
+                text.push_str(&format!("talent\t{spell}\t{r}\n"));
+            }
         }
         path().is_some_and(|p| crate::local_state::write_atomic(&p, &text).is_ok())
     }
@@ -294,7 +334,7 @@ impl Profile {
         self.current.and_then(|i| self.chars.get(i))
     }
 
-    fn hero_mut(&mut self) -> Option<&mut Character> {
+    pub(super) fn hero_mut(&mut self) -> Option<&mut Character> {
         self.current.and_then(|i| self.chars.get_mut(i))
     }
 
@@ -493,6 +533,7 @@ impl Profile {
             }
         }
         self.copper += run.earned;
+        self.kills += u64::from(run.kills);
         self.version += 1;
         self.save();
         (0..data::MAPS.len()).find(|&m| !before[m] && self.is_open(m))
@@ -770,6 +811,18 @@ mod tests {
         assert_eq!(p.hero().map(|c| c.name.as_str()), Some("Jaina"));
         p.delete(0);
         assert!(p.hero().is_none() && p.chars.is_empty());
+    }
+
+    #[test]
+    fn talents_load_by_spell_within_their_ranks() {
+        let mut p = Profile::empty();
+        // A Warrior: Improved Heroic Strike 2, Sweeping Strikes past its one rank, and a Mage
+        // talent that is no Warrior's.
+        p.parse("char\tThrall\t0\t2\t0\t1\t2\t3\t4\t0\t3\ntalent\t12282\t2\ntalent\t12292\t9\ntalent\t11069\t1\n");
+        let t = &p.chars[0].talents;
+        assert_eq!(t[0], 2);
+        assert_eq!(t[4], 1);
+        assert_eq!(t.iter().map(|&r| u32::from(r)).sum::<u32>(), 3);
     }
 
     #[test]

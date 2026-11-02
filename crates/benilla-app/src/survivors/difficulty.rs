@@ -12,7 +12,7 @@
 use benilla_world::world_point::WorldPoint;
 use bevy::prelude::*;
 
-use super::data::{self, EnemyDef};
+use super::data::{self, EnemyDef, Kind};
 use super::enemies::{self, Enemy, Loot};
 use super::hero::{self, Hero};
 use super::hud::{centered_bundle, text_bundle, HudFont, MenuRoot, DIM_GREY, GOLD_TONE};
@@ -639,7 +639,8 @@ fn affix_hazards(
         }
     }
 
-    // Explosive: an orb every nine seconds, seven to ten yards out; it blasts after its fuse.
+    // Explosive: an orb every nine seconds, seven to ten yards out, or within reach of a hero
+    // whose blows reach no farther; it blasts after its fuse.
     if has(&run, Affix::Explosive) {
         if run.affix.next_orb == 0.0 {
             run.affix.next_orb = now + 15.0;
@@ -647,7 +648,23 @@ fn affix_hazards(
         if now >= run.affix.next_orb {
             run.affix.next_orb = now + 9.0;
             let a = rng.range(0.0, std::f32::consts::TAU);
-            let at = ground(hpos + Vec3::new(a.cos(), 0.0, a.sin()) * rng.range(7.0, 10.0));
+            let reach = run
+                .abilities
+                .iter()
+                .filter(|o| {
+                    matches!(
+                        o.def.kind,
+                        Kind::Bolt | Kind::Strike | Kind::Melee | Kind::Chain
+                    )
+                })
+                .map(|o| o.def.range)
+                .fold(0.0, f32::max);
+            let (near, far) = if reach < 10.0 {
+                (3.0, reach.max(4.0))
+            } else {
+                (7.0, 10.0)
+            };
+            let at = ground(hpos + Vec3::new(a.cos(), 0.0, a.sin()) * rng.range(near, far));
             // As tough as two of the moment's creatures: a couple of spells, not a stray tick.
             let pool = data::wave_pool(now, data::roster(roster.stage).enemies.len());
             let tough = data::roster(roster.stage).enemies[pool[1]].hp * data::hp_scale(now) * 2.0;

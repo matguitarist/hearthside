@@ -4,6 +4,7 @@
 use bevy::prelude::*;
 
 use super::data::{AbilityDef, Effect, Kind};
+use super::difficulty::Orb;
 use super::enemies::{self, Enemy, Loot};
 use super::hero::{self, Hero};
 use super::units::{self, flat, Fx, Marks, UnitSpec, COLOR_HEAL, COLOR_MELEE, COLOR_SPELL};
@@ -81,6 +82,8 @@ struct Foe {
     hp: f32,
     dist: f32,
     radius: f32,
+    /// An Explosive orb, which single-target picks take first.
+    orb: bool,
 }
 
 /// The numbers one cast uses, from the ability's level and the hero's stats.
@@ -147,12 +150,20 @@ fn roll(rng: &mut Rng, crit: f32, dmg: f32) -> (f32, bool) {
     }
 }
 
+/// Orbs in range go first, so an Explosive orb is shot down before it blasts.
+fn orbs_first(v: &mut [Foe]) {
+    v.sort_by_key(|f| !f.orb);
+}
+
 fn nearest(foes: &[Foe], range: f32, n: usize) -> Vec<Foe> {
-    foes.iter()
+    let mut v: Vec<Foe> = foes
+        .iter()
         .filter(|f| f.dist <= range + f.radius)
-        .take(n)
         .copied()
-        .collect()
+        .collect();
+    orbs_first(&mut v);
+    v.truncate(n);
+    v
 }
 
 fn toughest(foes: &[Foe], range: f32, n: usize) -> Vec<Foe> {
@@ -162,6 +173,7 @@ fn toughest(foes: &[Foe], range: f32, n: usize) -> Vec<Foe> {
         .copied()
         .collect();
     v.sort_by(|a, b| b.hp.total_cmp(&a.hp));
+    orbs_first(&mut v);
     v.truncate(n);
     v
 }
@@ -200,7 +212,7 @@ pub(super) fn cast_abilities(
     mut rng: ResMut<Rng>,
     spells: Option<Res<crate::ui_action::Spells>>,
     hero: Query<(Entity, &Transform), With<Hero>>,
-    enemies: Query<(Entity, &Transform, &Enemy)>,
+    enemies: Query<(Entity, &Transform, &Enemy, Has<Orb>)>,
     mut fx: Fx,
     mut pending: ResMut<PendingHits>,
     mut hits: MessageWriter<Hit>,
@@ -215,13 +227,14 @@ pub(super) fn cast_abilities(
     let now = run.elapsed;
     let mut foes: Vec<Foe> = enemies
         .iter()
-        .filter(|(_, _, e)| !e.dead)
-        .map(|(e, tf, en)| Foe {
+        .filter(|(_, _, e, _)| !e.dead)
+        .map(|(e, tf, en, orb)| Foe {
             e,
             pos: tf.translation,
             hp: en.hp,
             dist: hero::reach(hpos, tf.translation),
             radius: en.radius,
+            orb,
         })
         .collect();
     foes.sort_by(|a, b| a.dist.total_cmp(&b.dist));
@@ -542,7 +555,7 @@ pub(super) fn tick_areas(
     spells: Option<Res<crate::ui_action::Spells>>,
     mut areas: Query<(Entity, &Transform, &mut GroundArea)>,
     mut totems: Query<(Entity, &Transform, &mut Totem), Without<GroundArea>>,
-    enemies: Query<(Entity, &Transform, &Enemy), (Without<GroundArea>, Without<Totem>)>,
+    enemies: Query<(Entity, &Transform, &Enemy, Has<Orb>), (Without<GroundArea>, Without<Totem>)>,
     mut fx: Fx,
     mut pending: ResMut<PendingHits>,
     mut hits: MessageWriter<Hit>,
@@ -555,13 +568,14 @@ pub(super) fn tick_areas(
     let now = run.elapsed;
     let live: Vec<Foe> = enemies
         .iter()
-        .filter(|(_, _, e)| !e.dead)
-        .map(|(e, tf, en)| Foe {
+        .filter(|(_, _, e, _)| !e.dead)
+        .map(|(e, tf, en, orb)| Foe {
             e,
             pos: tf.translation,
             hp: en.hp,
             dist: 0.0,
             radius: en.radius,
+            orb,
         })
         .collect();
 
@@ -656,6 +670,7 @@ pub(super) fn tick_areas(
 
 /// Land every hit due: damage and its number, the over-time part, crowd control, the marks, and
 /// death with its loot.
+#[allow(clippy::type_complexity)]
 pub(super) fn apply_hits(
     mut commands: Commands,
     time: Res<Time>,
@@ -669,6 +684,7 @@ pub(super) fn apply_hits(
         &mut Enemy,
         &mut ObjectStore,
         &mut Marks,
+        Has<Orb>,
     )>,
     mut fx: Fx,
     mut loot: MessageWriter<Loot>,
@@ -729,7 +745,7 @@ pub(super) fn apply_hits(
         };
 
     for h in all {
-        let Ok((e, guid, tf, mut en, mut store, mut marks)) = enemies.get_mut(h.target) else {
+        let Ok((e, guid, tf, mut en, mut store, mut marks, orb)) = enemies.get_mut(h.target) else {
             continue;
         };
         if en.dead {
@@ -740,6 +756,10 @@ pub(super) fn apply_hits(
             if !en.boss && en.hp / en.max_hp <= threshold {
                 dmg = dmg.max(en.hp);
             }
+        }
+        // An Explosive orb falls to three blows of anything, as in Mythic+.
+        if orb && dmg > 0.0 {
+            dmg = dmg.max(en.max_hp / 3.0);
         }
         if dmg > 0.0 {
             en.hp -= dmg;
@@ -788,7 +808,7 @@ pub(super) fn apply_hits(
     }
 
     // The over-time ticks, once a second each.
-    for (e, guid, tf, mut en, mut store, mut marks) in &mut enemies {
+    for (e, guid, tf, mut en, mut store, mut marks, _) in &mut enemies {
         if en.dead || en.dots.is_empty() {
             continue;
         }

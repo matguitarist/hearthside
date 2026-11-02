@@ -784,11 +784,13 @@ pub(super) fn start_run(run: &mut Run, selection: &mut Selection) -> bool {
     selection.stage = selection.map;
     let next_guid = run.next_guid;
     let ranks = run.ranks;
+    let talents = run.talents;
     *run = Run {
         class,
         race,
         next_guid,
         ranks,
+        talents,
         difficulty: selection.difficulty,
         affixes: super::difficulty::active(selection.difficulty, super::difficulty::week()),
         ..Run::default()
@@ -798,11 +800,9 @@ pub(super) fn start_run(run: &mut Run, selection: &mut Selection) -> bool {
     for _ in 0..super::merchant::provisions(&ranks) {
         run.bag.add(super::bag::potion());
     }
-    run.abilities.push(Owned {
-        def: data::ability(class.start),
-        level: 1,
-        cd: 0.5,
-    });
+    let first = run.own(data::ability(class.start), 0.5);
+    run.abilities.push(first);
+    run.take_openers();
     run.hp = run.stats().max_hp;
     run.version += 1;
     true

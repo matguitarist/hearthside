@@ -217,11 +217,17 @@ pub(super) struct Cast {
     pub(super) cooldown: f32,
 }
 
-pub(super) fn cast_at(def: &'static AbilityDef, level: u8, stats: &Stats) -> Cast {
+pub(super) fn cast_at(
+    def: &'static AbilityDef,
+    level: u8,
+    stats: &Stats,
+    bonus: crate::survivors::talents::Bonus,
+) -> Cast {
     let o = Owned {
         def,
         level,
         cd: 0.0,
+        bonus,
     };
     let mult = o.damage_mult() * stats.might;
     Cast {
@@ -389,7 +395,7 @@ fn ability_tip(
     spells: Option<&crate::ui_action::Spells>,
 ) -> Vec<TipLine> {
     let def = o.def;
-    let now = cast_at(def, o.level, stats);
+    let now = cast_at(def, o.level, stats, o.bonus);
     let mut lines = vec![
         TipLine::new(spell_name(spells, def.spell, def.key), Color::WHITE)
             .header()
@@ -425,7 +431,7 @@ fn ability_tip(
         ));
     }
     if o.level < data::MAX_ABILITY_LEVEL {
-        let next = cast_at(def, o.level + 1, stats);
+        let next = cast_at(def, o.level + 1, stats, o.bonus);
         lines.push(TipLine::new("Next rank:", Color::WHITE));
         lines.push(TipLine::new(next_rank(def, &now, &next), GOLD));
     } else {

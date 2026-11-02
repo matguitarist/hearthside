@@ -266,7 +266,9 @@ pub(super) fn build_merchant(
         // Over the whole screen, so nothing under it takes a click or a drag while it is up.
         ui.spawn((
             MerchantOverlay,
+            // Block, not Node's default Pass: clicks on it must not reach the screen beneath.
             Interaction::default(),
+            bevy::ui::FocusPolicy::Block,
             Node {
                 position_type: PositionType::Absolute,
                 width: Val::Percent(100.0),

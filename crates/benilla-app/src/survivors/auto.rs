@@ -6,7 +6,8 @@
 //! each tab of Settings, for their screenshots; `:bag` opens the backpack 25 seconds in,
 //! `:merchant` the merchant on the pick screen, `:zones` stands in every zone on the pick screen
 //! before the run, `:map` opens the world map 20 seconds in, and `:difficulty` shows the
-//! difficulty dialog before the run (`WOW_SURVIVORS_DIFFICULTY=<n>` sets the run's).
+//! difficulty dialog before the run (`WOW_SURVIVORS_DIFFICULTY=<n>` sets the run's), and
+//! `:talents` the talents dialog, `:achievements` the achievement toast and dialog.
 //! `WOW_SURVIVORS_MAP=<index or name>` picks the battleground, and `WOW_SURVIVORS_LOOT=rich` makes
 //! coins and items drop twenty times as often.
 
@@ -48,6 +49,10 @@ pub(super) struct Auto {
     loading: bool,
     /// `<class>:difficulty`: show the difficulty dialog before the run.
     pub(super) difficulty: bool,
+    /// `<class>:talents`: show the talents dialog before the run.
+    pub(super) talents: bool,
+    /// `<class>:achievements`: show the achievement toast and dialog before the run.
+    pub(super) achievements: bool,
     /// Seconds the loading screen has covered the menu, for `:zones`' veil shots.
     veil_t: f32,
     /// `:merchant`: the seconds since the rare elite fell.
@@ -98,6 +103,8 @@ pub(super) fn from_env() -> Option<Auto> {
     let chars = mode.eq_ignore_ascii_case("chars");
     let loading = mode.eq_ignore_ascii_case("loading");
     let difficulty = mode.eq_ignore_ascii_case("difficulty");
+    let talents = mode.eq_ignore_ascii_case("talents");
+    let achievements = mode.eq_ignore_ascii_case("achievements");
     let class = data::CLASSES
         .iter()
         .position(|c| c.name.eq_ignore_ascii_case(name))
@@ -132,6 +139,8 @@ pub(super) fn from_env() -> Option<Auto> {
         chars,
         loading,
         difficulty,
+        talents,
+        achievements,
         veil_t: 0.0,
         rare_gone: 0.0,
         frames: 0,
@@ -270,11 +279,8 @@ pub(super) fn drive(
                 if auto.all {
                     for key in run.class.pool {
                         if !run.abilities.iter().any(|o| o.def.key == *key) {
-                            run.abilities.push(super::Owned {
-                                def: data::ability(key),
-                                level: 1,
-                                cd: 0.5,
-                            });
+                            let o = run.own(data::ability(key), 0.5);
+                            run.abilities.push(o);
                         }
                     }
                 }

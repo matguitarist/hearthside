@@ -46,6 +46,10 @@ same CMaNGOS set up and managed over SSH on a home server, or on one at an addre
   each opened by winning the one before. Harder runs pay more coin and better armor; from +2 the
   week's affixes join in (Fortified or Tyrannical, then Bolstering, Raging, Sanguine or Bursting at
   +4, and Volcanic, Explosive, Quaking or Grievous at +7), turning over every Tuesday.
+- **Talents and achievements:** each character has its class's three talent trees, real 1.12
+  talents reworked to shape the mode's spells, with a point for each difficulty won in each zone.
+  The account earns 25 achievements, from 100 kills in a run to a Mythic +20 win, each paying
+  into the purse.
 - **Level-up cards** that deal in, tilt toward the cursor and lift on hover. Their WoW item-quality
   colour says how strong a pick is, and each card lists exactly what changes, like
   `Damage 20 » 26` or `Targets 2 » 3`.
