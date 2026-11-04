@@ -111,7 +111,7 @@ enum HelpTopic: String, CaseIterable, Identifiable {
                        "**Set Up Pandaria** copies the client's game files (about 23 GB) to the home server, then builds the server from source and reads its maps: a few hours on a small CPU. You can quit the launcher meanwhile.",
                        "When it runs, create your account in the launcher, then press **Play**."]),
              .h("The client"),
-             .p("The first Play prepares your client: it is patched to sign in to your server, its graphics get fixes for current macOS, AMD FSR sharpening, and Survivors' ambient occlusion and ground mist (each can be turned off in **Settings › Pandaria**), and it is signed for this Mac. It runs under Rosetta 2 and needs Apple's command line developer tools (xcode-select --install). **Settings › Pandaria › Prepare Again** redoes it; an update that changes the fixes redoes it at the next Play."),
+             .p("The first Play prepares your client: it is patched to sign in to your server, its graphics get fixes for current macOS, AMD FSR sharpening, and Survivors' ambient occlusion and ground mist (in **Settings › Pandaria**, occlusion can be turned off and the fog set from Off to Ultra), and it is signed for this Mac. It runs under Rosetta 2 and needs Apple's command line developer tools (xcode-select --install). **Settings › Pandaria › Prepare Again** redoes it; an update that changes the fixes redoes it at the next Play."),
              .h("One server at a time"),
              .p("Pandaria and Classic on the home server use the same ports, so starting one stops the other. Pandaria keeps running when the game quits; stop it in the **Server** menu.")]
         case .graphics:

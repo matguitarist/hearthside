@@ -53,6 +53,7 @@ enum Prefs {
     static let pandariaFolderKey = "pandariaFolder"
     static let pandariaOcclusionKey = "pandariaAmbientOcclusion"
     static let pandariaMistKey = "pandariaGroundMist"
+    static let pandariaFogKey = "pandariaFogLevel"
 
     static let defaultDataURL = "https://archive.org/download/WoW_1.12.1-5875/1.12.1-5875_enUS.zip"
 

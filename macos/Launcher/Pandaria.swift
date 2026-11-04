@@ -436,7 +436,13 @@ enum PandariaClient {
 
     /// Ambient occlusion and ground mist, glhook's own passes (Settings › Pandaria), on by default.
     static var occlusion: Bool { UserDefaults.standard.object(forKey: Prefs.pandariaOcclusionKey) as? Bool ?? true }
-    static var mist: Bool { UserDefaults.standard.object(forKey: Prefs.pandariaMistKey) as? Bool ?? true }
+    /// The mist's level, `FogLevel`: High by default, Off for those who had turned the mist off
+    /// before there were levels.
+    static var fog: Int {
+        let defaults = UserDefaults.standard
+        if let level = defaults.object(forKey: Prefs.pandariaFogKey) as? Int { return level }
+        return defaults.object(forKey: Prefs.pandariaMistKey) as? Bool == false ? 0 : FogLevel.high.rawValue
+    }
 
     /// The first time, or after an update changed the fixes, `prepare`; else the realm, the
     /// settings and the addons only.
@@ -529,5 +535,23 @@ enum PandariaClient {
             try? fm.removeItem(at: dest)
             if install { try? fm.copyItem(at: bundled.appendingPathComponent(name), to: dest) }
         }
+        // What the game starts with, for AzerothPlus's Graphics tab.
+        guard install else { return }
+        let fog = PandariaClient.fog
+        let settings = """
+            -- Written by Hearthside at every Play, from Settings › Pandaria.
+            AzerothPlusGraphics = { ao = \(occlusion ? 1 : 0), mist = \(fog > 0 ? 1 : 0), fog = \(fog > 0 ? fog : FogLevel.high.rawValue) }
+
+            """
+        try? settings.write(to: addons.appendingPathComponent("AzerothPlus/glhook.lua"), atomically: true, encoding: .utf8)
     }
+}
+
+/// The ground mist's levels, named as WoW Forever names its Compute Effects (fog and mist) levels;
+/// glhook's GLHOOK_FOG takes 1 to 5.
+enum FogLevel: Int, CaseIterable, Identifiable {
+    case off, low, fair, good, high, ultra
+
+    var id: Int { rawValue }
+    var name: String { ["Off", "Low", "Fair", "Good", "High", "Ultra"][rawValue] }
 }

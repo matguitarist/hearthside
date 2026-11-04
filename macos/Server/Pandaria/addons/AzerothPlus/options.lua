@@ -30,13 +30,15 @@ local PAGES = {
     { "autoRepair", "Repair everything at vendors that can" },
     { "guildRepair", "    From the guild bank when allowed" },
   } },
+  -- Filled by graphics.lua.
+  { "Graphics", {} },
   { "Bots", {
     { "botPanel", "Bot party panel",
       "Add bots of your level, find bots nearby, and command your party. /ap bots opens it too." },
   } },
 }
 
-local WIDTH, ROW = 440, 26
+local WIDTH, ROW = 480, 26
 local most = 0
 for _, page in ipairs(PAGES) do most = math.max(most, #page[2]) end
 
@@ -68,6 +70,7 @@ local close = CreateFrame("Button", nil, panel, "UIPanelCloseButton")
 close:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -6, -6)
 
 local tabs, pages, boxes = {}, {}, {}
+AP.optionPages = {}
 local tabWidth = math.floor((WIDTH - 40) / #PAGES)
 
 local function show(n)
@@ -98,6 +101,7 @@ for p, def in ipairs(PAGES) do
   page:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -20, 48)
   page:Hide()
   pages[p] = page
+  AP.optionPages[def[1]] = page
 
   for i, row in ipairs(def[2]) do
     local key, tip = row[1], row[3]

@@ -152,7 +152,7 @@ struct PandariaSettings: View {
     @AppStorage("settingsPane") private var settingsPane = SettingsPane.general
     @AppStorage(Prefs.pandariaFolderKey) private var folderPath = ""
     @AppStorage(Prefs.pandariaOcclusionKey) private var occlusion = true
-    @AppStorage(Prefs.pandariaMistKey) private var mist = true
+    @AppStorage(Prefs.pandariaFogKey) private var fog = PandariaClient.fog
     @State private var newAccount = false
     @State private var passwordFor: String?
 
@@ -219,11 +219,13 @@ struct PandariaSettings: View {
     private var graphics: some View {
         Section {
             Toggle("Ambient occlusion", isOn: $occlusion)
-            Toggle("Ground mist", isOn: $mist)
+            Picker("Fog", selection: $fog) {
+                ForEach(FogLevel.allCases) { Text($0.name).tag($0.rawValue) }
+            }
         } header: {
             Text("Graphics")
         } footer: {
-            Text("Survivors' effects, added to the client. Ambient occlusion shades the corners and contact points of the world and replaces the client's own, which is turned off while it's on. Ground mist gathers in hollows and valleys and is lit by the sun through the trees. Both apply at the next Play; in the game, Control-Option-O and Control-Option-M switch them: on, off, then the effect alone.")
+            Text("Survivors' effects, added to the client. Ambient occlusion shades the corners and contact points of the world and replaces the client's own, which is turned off while it's on. Fog is ground mist that gathers in hollows and valleys and is lit by the sun through the trees; each level up is smoother, reaches further and has finer light shafts, at some cost in frame rate (Low has no shafts, Ultra is the densest). Both apply at the next Play; in the game, Control-Option-O and Control-Option-M switch them: on, off, then the effect alone, and Control-Option-F steps the fog level. AzerothPlus has them too, under /ap › Graphics.")
                 .font(.caption).foregroundStyle(.secondary)
         }
         .disabled(game.running)

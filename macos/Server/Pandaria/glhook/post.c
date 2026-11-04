@@ -106,7 +106,7 @@ static GLuint copy_depth(const struct view *v) {
     return depth_tex;
 }
 
-int post_world(const struct view *v, int ao, int atmos) {
+int post_world(const struct view *v, int ao, int atmos, int fog) {
     if (v->w <= 0 || v->h <= 0 || (!ao && !atmos)) return 0;
     GLint read_fbo, draw_fbo, prog, active, unpack;
     glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING_EXT, &read_fbo);
@@ -131,7 +131,7 @@ int post_world(const struct view *v, int ao, int atmos) {
         glDepthMask(GL_FALSE);
         // "show" draws one effect alone, so the other stays off.
         if (ao && atmos != 2) drawn |= ao_pass(v, depth, ao == 2);
-        if (atmos && ao != 2 && v->oriented) drawn |= atmos_pass(v, depth, atmos == 2);
+        if (atmos && ao != 2 && v->oriented) drawn |= atmos_pass(v, depth, atmos == 2, fog);
     }
 
     glUseProgram(prog);

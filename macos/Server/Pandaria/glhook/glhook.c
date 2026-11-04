@@ -10,7 +10,10 @@
 // GLHOOK_SHOT=<dir>: captures on request, see shot().
 // GLHOOK_AO=0: no ambient occlusion (ao.c); GLHOOK_AO=show: the occlusion alone.
 // GLHOOK_ATMOS=0: no ground mist (atmos.c); GLHOOK_ATMOS=show: the mist alone.
-// In the game, Control-Option-O and Control-Option-M cycle each: on, off, alone (see watch_keys).
+// GLHOOK_FOG=<1-5>: the mist's level, Low to Ultra (default 4, High).
+// GLHOOK_TRACE_FILES=1: log the AzerothPlus files the client opens (see requested).
+// In the game, Control-Option-O and Control-Option-M cycle each: on, off, alone; Control-Option-F
+// steps the fog level (see watch_keys). AzerothPlus's Graphics tab sets them too (see requested).
 #include "post.h"
 #include <OpenGL/CGLContext.h>
 #include <OpenGL/OpenGL.h>
@@ -28,6 +31,8 @@
 #include <objc/runtime.h>
 #include <dispatch/dispatch.h>
 #include <pthread.h>
+#include <fcntl.h>
+#include <stdarg.h>
 
 #define DYLD_INTERPOSE(_new, _old) \
     __attribute__((used)) static struct { const void *n, *o; } _interpose_##_old \
@@ -130,30 +135,39 @@ static struct attachment attached(GLenum target, GLenum point) {
 
 // GLHOOK_AO and GLHOOK_ATMOS: 0 off, 1 on (the default), "show" the effect alone (2). With
 // GLHOOK_SHOT, the files <GLHOOK_SHOT>/ao-mode and atmos-mode override them while the game runs,
-// read every half second or so.
-static int ao_mode = -1, atmos_mode = -1;
+// read every half second or so. GLHOOK_FOG and the file fog-level hold the mist's level, 1 to 5.
+static int ao_mode = -1, atmos_mode = -1, fog_level = -1;
+static const char *fog_names[] = {"", "low", "fair", "good", "high", "ultra"};
 
 static int parse_mode(const char *v) { return !v ? 1 : !strcmp(v, "0") ? 0 : !strcmp(v, "show") ? 2 : 1; }
 
+static int parse_level(const char *v) {
+    int l = v ? atoi(v) : 4;
+    return l < 1 || l > 5 ? 4 : l;
+}
+
 static void read_mode(int *mode, const char *var, const char *file) {
-    if (*mode < 0) *mode = parse_mode(getenv(var));
+    int (*parse)(const char *) = mode == &fog_level ? parse_level : parse_mode;
+    if (*mode < 0) *mode = parse(getenv(var));
     const char *dir = getenv("GLHOOK_SHOT");
     if (!dir || flushes % 30) return;
     char path[1024], v[16] = "";
     snprintf(path, sizeof path, "%s/%s", dir, file);
     FILE *f = fopen(path, "r");
     if (!f) return;
-    if (fgets(v, sizeof v, f)) v[strcspn(v, "\n")] = 0, *mode = parse_mode(v);
+    if (fgets(v, sizeof v, f)) v[strcspn(v, "\n")] = 0, *mode = parse(v);
     fclose(f);
 }
 
 static void read_modes(void) {
     read_mode(&ao_mode, "GLHOOK_AO", "ao-mode");
     read_mode(&atmos_mode, "GLHOOK_ATMOS", "atmos-mode");
+    read_mode(&fog_level, "GLHOOK_FOG", "fog-level");
 }
 
 // Control-Option-O (occlusion) and Control-Option-M (mist): on, then off, then the effect alone,
-// then on again. By the letter the layout types, so M is M on AZERTY too; the game never sees
+// then on again. Control-Option-F steps the fog level up, from Ultra back to Low, and turns the mist
+// on if it was off. By the letter the layout types, so M is M on AZERTY too; the game never sees
 // these presses. The client's GLApplication takes its keys in its own sendEvent:, before any
 // AppKit event monitor, so that method is wrapped.
 static int next_mode(int mode) { return mode == 1 ? 0 : mode == 0 ? 2 : 1; }
@@ -167,6 +181,13 @@ static void send_event(id app, SEL sel, id event) {
         id chars = ((id(*)(id, SEL))objc_msgSend)(event, sel_registerName("charactersIgnoringModifiers"));
         const char *c = chars ? ((const char *(*)(id, SEL))objc_msgSend)(chars, sel_registerName("UTF8String")) : NULL;
         int *mode = !c ? NULL : !strcasecmp(c, "o") ? &ao_mode : !strcasecmp(c, "m") ? &atmos_mode : NULL;
+        if (c && !strcasecmp(c, "f")) {
+            if (fog_level < 0) read_modes();
+            fog_level = fog_level % 5 + 1;
+            if (!atmos_mode) atmos_mode = 1;
+            fprintf(stderr, "glhook: fog %s\n", fog_names[fog_level]);
+            return;
+        }
         if (mode) {
             if (*mode < 0) read_modes();
             *mode = next_mode(*mode);
@@ -177,6 +198,47 @@ static void send_event(id app, SEL sel, id event) {
     }
     client_send_event(app, sel, event);
 }
+
+// AzerothPlus's Graphics tab asks by showing one of its images, AzerothPlus/glhook/<ao|mist|fog>-
+// <value>.blp, 1x1 and clear: the client opens the file to load it, and glhook sees the name. It
+// opens a file again each time a texture changes to it, so the tab clears the texture first; it
+// never opens a file missing from the list of the addon's files it makes at startup, so the images
+// ship with the addon. GLHOOK_TRACE_FILES=1 logs every AzerothPlus file the client opens.
+static void requested(const char *path) {
+    if (path && getenv("GLHOOK_TRACE_FILES") && strcasestr(path, "azerothplus")) fprintf(stderr, "glhook: open %s\n", path);
+    const char *at = path ? strcasestr(path, "azerothplus/glhook/") : NULL;
+    if (!at) return;
+    char what[8] = "";
+    int value;
+    if (sscanf(at + 19, "%7[a-zA-Z]-%d", what, &value) != 2) return;
+    if (ao_mode < 0) read_modes();
+    if (!strcasecmp(what, "ao") && value >= 0 && value <= 2) ao_mode = value;
+    else if (!strcasecmp(what, "mist") && value >= 0 && value <= 2) atmos_mode = value;
+    else if (!strcasecmp(what, "fog") && value >= 1 && value <= 5) fog_level = value;
+    else return;
+    fprintf(stderr, "glhook: AzerothPlus set %s to %d\n", what, value);
+}
+
+static int hook_open(const char *path, int flags, ...) {
+    mode_t mode = 0;
+    if (flags & O_CREAT) {
+        va_list args;
+        va_start(args, flags);
+        mode = (mode_t)va_arg(args, int);
+        va_end(args);
+    }
+    requested(path);
+    return open(path, flags, mode);
+}
+
+static FILE *hook_fopen(const char *path, const char *mode) {
+    requested(path);
+    return fopen(path, mode);
+}
+
+// The client's calls come here; glhook's own reach the real functions.
+DYLD_INTERPOSE(hook_open, open)
+DYLD_INTERPOSE(hook_fopen, fopen)
 
 static void watch_keys(void *unused) {
     (void)unused;
@@ -352,7 +414,7 @@ static void world_blit(GLint read_fbo) {
                 v.forward[0], v.forward[1], v.forward[2], v.cam[0], v.cam[1], v.cam[2], v.fog[0], v.fog[1], v.fog[2],
                 v.lit, v.to_sun[0], v.to_sun[1], v.to_sun[2], v.sun[0], v.sun[1], v.sun[2]);
     GLuint saved_draw = draw_fbo;
-    post_world(&v, ao_mode, atmos_mode);
+    post_world(&v, ao_mode, atmos_mode, fog_level);
     draw_fbo = saved_draw;
 }
 

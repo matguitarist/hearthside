@@ -8,8 +8,10 @@
 // screen-space shadow ray), so canopies and walls cut it into beams. `apply_src` upsamples it with
 // depth-aware weights and lays it over the colour. The fog colour, the sun and its colour are the
 // client's own (glhook.c).
+// The fog level (GLHOOK_FOG, 1 Low to 5 Ultra, as the Compute Effects levels of WoW Forever) sets
+// its resolution, how far it reaches and how finely the shafts are sampled; see `levels`.
 // GLHOOK_ATMOS=show draws the mist alone (glhook.c); GLHOOK_ATMOS_DENSITY (extinction per yard at
-// the ground, default 0.025) and GLHOOK_ATMOS_SHAFTS (default 0.3) tune it.
+// the ground) and GLHOOK_ATMOS_SHAFTS (the shafts' strength) override the level's.
 #include <OpenGL/OpenGL.h>
 #include <OpenGL/gl.h>
 #include <OpenGL/glext.h>
@@ -44,8 +46,21 @@ static const char *ground_src =
     "  else gl_FragColor = vec4(sum / n, 0.0, 0.0, first > 0.0 ? 1.0 : 0.05);\n"
     "}\n";
 
+// What each fog level draws: the mist at 1 / scale of the frame's resolution, out to `far` yards;
+// shafts from `samples` points of the air over the last `span` yards, each tested toward the sun in
+// `steps` steps (no shafts at 0); and its density and shafts' strength.
+static const struct level {
+    int scale, samples, steps;
+    float span, far, density, shafts;
+} levels[] = {
+    {4, 0, 0, 30.0f, 200.0f, 0.02f, 0.0f},   // Low
+    {2, 0, 0, 30.0f, 250.0f, 0.025f, 0.0f},  // Fair
+    {2, 4, 4, 30.0f, 300.0f, 0.025f, 0.3f},  // Good
+    {2, 8, 6, 30.0f, 300.0f, 0.025f, 0.3f},  // High, the mist as first made
+    {2, 12, 8, 40.0f, 450.0f, 0.03f, 0.35f}, // Ultra
+};
+
 static const char *atmos_src =
-    POST_DEPTH_GLSL VIEW_GLSL
     "uniform sampler2D ground_tex;\n"
     // xyz toward the sun, w the shafts' strength.
     "uniform vec4 sun;\n"
@@ -56,14 +71,10 @@ static const char *atmos_src =
     "uniform vec3 mist;\n"
     "uniform vec4 shape;\n"
     "uniform float time;\n"
-    // The farthest the mist is integrated to: past it, the zone's own fog has the scene.
-    "const float FAR = 300.0;\n"
-    // The air sampled for shafts: this many samples over the last SHAFT_SPAN yards before the
-    // surface, each tested over SHADOW_SPAN yards toward the sun in SHADOW_STEPS steps; a surface is
-    // taken to be THICKNESS yards thick.
-    "const int SHAFT_SAMPLES = 8;\n"
-    "const float SHAFT_SPAN = 30.0;\n"
-    "const int SHADOW_STEPS = 6;\n"
+    // FAR, the farthest the mist is integrated to (past it, the zone's own fog has the scene), and
+    // the air sampled for shafts, SHAFT_SAMPLES over the last SHAFT_SPAN yards before the surface,
+    // each tested toward the sun in SHADOW_STEPS steps, come from the level (`level_program`). The
+    // tests reach SHADOW_SPAN yards; a surface is taken to be THICKNESS yards thick.
     "const float SHADOW_SPAN = 24.0;\n"
     "const float THICKNESS = 8.0;\n"
     "float ign(vec2 p) { return fract(52.9829189 * fract(dot(p, vec2(0.06711056, 0.00583715)))); }\n"
@@ -114,7 +125,7 @@ static const char *atmos_src =
     "  return 1.0;\n"
     "}\n"
     "void main() {\n"
-    "  vec2 p = floor(gl_FragCoord.xy) * 2.0;\n"
+    "  vec2 p = floor(gl_FragCoord.xy) * SCALE;\n"
     "  float ground = texture2D(ground_tex, vec2(0.5)).r;\n"
     "  float t = min(distance_of(depth_at(p)), FAR);\n"
     "  vec3 rel = rel_pos(p, t), pos = cam + rel;\n"
@@ -148,19 +159,18 @@ static const char *atmos_src =
     "}\n";
 
 static const char *apply_src =
-    POST_DEPTH_GLSL
     "uniform sampler2D atmos;\n"
     "uniform vec2 half_size;\n"
     "void main() {\n"
     "  vec2 p = floor(gl_FragCoord.xy);\n"
     "  float z = distance_of(depth_at(p));\n"
-    "  vec2 h0 = floor(p * 0.5);\n"
+    "  vec2 h0 = floor(p / SCALE);\n"
     "  vec4 sum = vec4(0.0);\n"
     "  float weight = 0.0;\n"
     "  for (int y = -1; y <= 1; y++) {\n"
     "    for (int x = -1; x <= 1; x++) {\n"
     "      vec2 h = clamp(h0 + vec2(float(x), float(y)), vec2(0.0), half_size - 1.0);\n"
-    "      float dz = abs(distance_of(depth_at(h * 2.0)) - z) / (z * 0.03);\n"
+    "      float dz = abs(distance_of(depth_at(h * SCALE)) - z) / (z * 0.03);\n"
     "      float w = exp(-dz * dz) + 1e-4;\n"
     "      sum += texture2D(atmos, (h + 0.5) / half_size) * w;\n"
     "      weight += w;\n"
@@ -168,6 +178,21 @@ static const char *apply_src =
     "  }\n"
     "  gl_FragColor = sum / weight;\n"
     "}\n";
+
+// A program of the mist at `l`: the depth, the level's constants and the view before `body`.
+static GLuint level_program(const struct level *l, const char *body) {
+    char src[16384];
+    int n = snprintf(src, sizeof src,
+                     "%s#define SCALE %d.0\n#define FAR %g\n#define SHAFT_SAMPLES %d\n#define SHAFT_SPAN %g\n"
+                     "#define SHADOW_STEPS %d\n%s%s",
+                     POST_DEPTH_GLSL, l->scale, l->far, l->samples > 0 ? l->samples : 1, l->span,
+                     l->steps > 0 ? l->steps : 1, VIEW_GLSL, body);
+    if (n >= (int)sizeof src) {
+        fprintf(stderr, "glhook: mist source too long\n");
+        return 0;
+    }
+    return post_program("mist", src);
+}
 
 static void set_view(GLuint p, const struct view *v) {
     glUniform1i(glGetUniformLocation(p, "depth"), 0);
@@ -180,26 +205,33 @@ static void set_view(GLuint p, const struct view *v) {
     glUniform3fv(glGetUniformLocation(p, "cam"), 1, v->cam);
 }
 
-int atmos_pass(const struct view *v, unsigned depth_tex, int show) {
+int atmos_pass(const struct view *v, unsigned depth_tex, int show, int level) {
     static GLuint ground, atmos, apply, ground_fbo, ground_tex, half_fbo, half_tex;
-    static int failed, tw, th, tuned, first;
-    static float density, shafts;
+    static int failed, tw, th, first, built;
     static CGLContextObj owner;
     if (CGLGetCurrentContext() != owner) {
         owner = CGLGetCurrentContext();
         ground = atmos = apply = ground_fbo = ground_tex = half_fbo = half_tex = 0;
+        failed = tw = th = built = 0;
+    }
+    if (level < 1) level = 1;
+    if (level > 5) level = 5;
+    const struct level *l = &levels[level - 1];
+    if (level != built) {
+        // Another level: its programs, and its target at the next size check.
+        if (atmos) glDeleteProgram(atmos);
+        if (apply) glDeleteProgram(apply);
+        atmos = apply = 0;
         failed = tw = th = 0;
+        built = level;
     }
-    if (!tuned) {
-        tuned = 1;
-        density = post_env("GLHOOK_ATMOS_DENSITY", 0.025f);
-        shafts = post_env("GLHOOK_ATMOS_SHAFTS", 0.3f);
-    }
+    float density = post_env("GLHOOK_ATMOS_DENSITY", l->density);
+    float shafts = l->samples ? post_env("GLHOOK_ATMOS_SHAFTS", l->shafts) : 0;
     if (failed) return 0;
     if (!ground && !(ground = post_program("mist", ground_src))) return failed = 1, 0;
-    if (!atmos && !(atmos = post_program("mist", atmos_src))) return failed = 1, 0;
-    if (!apply && !(apply = post_program("mist", apply_src))) return failed = 1, 0;
-    int w = v->w, h = v->h, hw = (w + 1) / 2, hh = (h + 1) / 2;
+    if (!atmos && !(atmos = level_program(l, atmos_src))) return failed = 1, 0;
+    if (!apply && !(apply = level_program(l, apply_src))) return failed = 1, 0;
+    int w = v->w, h = v->h, hw = (w + l->scale - 1) / l->scale, hh = (h + l->scale - 1) / l->scale;
     if (w != tw || h != th) {
         // The ground's height needs a float: it is in world units, hundreds of yards up.
         if (!ground_tex && !post_target(&ground_tex, &ground_fbo, GL_RGBA32F_ARB, 1, 1)) {

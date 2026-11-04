@@ -54,7 +54,9 @@ final class GameProcess: ObservableObject {
                 p.currentDirectoryURL = folder
                 var env = ProcessInfo.processInfo.environment
                 env["GLHOOK_AO"] = PandariaClient.occlusion ? "1" : "0"
-                env["GLHOOK_ATMOS"] = PandariaClient.mist ? "1" : "0"
+                let fog = PandariaClient.fog
+                env["GLHOOK_ATMOS"] = fog > 0 ? "1" : "0"
+                if fog > 0 { env["GLHOOK_FOG"] = String(fog) }
                 p.environment = env
             } else {
                 p.executableURL = Paths.gameBinary

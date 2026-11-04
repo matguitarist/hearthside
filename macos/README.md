@@ -117,7 +117,10 @@ The launcher:
   needs the command line developer tools. Later Plays only write the realmlist, `SSAO` (the
   client's own, off while ours is on) and the addons, unless the app's `glhook` sources changed
   (their digest is in the client's `Resources/glhook.sources`): then it is prepared again.
-  Settings › Pandaria turns the two effects off through `GLHOOK_AO` and `GLHOOK_ATMOS`. Its logs (`storage/logs`) are in the Logs window.
+  Settings › Pandaria turns the two effects off through `GLHOOK_AO` and `GLHOOK_ATMOS`, and sets the
+  mist's level, Low to Ultra, through `GLHOOK_FOG`; in the game, AzerothPlus's Graphics tab asks
+  glhook for changes by showing one of its clear images in `glhook/` (`glhook.c`, `requested`), and the
+  launcher writes the starting values into the addon's `glhook.lua` at every Play. Its logs (`storage/logs`) are in the Logs window.
 - **Installs AzerothPlus and AzerothAdmin** for Classic (`Addons.swift`, Settings › General):
   before each Classic launch the shipped addons replace their folders in `benilla-config/AddOns`,
   so the app's version is the one that runs; other addons there are untouched, and saved settings

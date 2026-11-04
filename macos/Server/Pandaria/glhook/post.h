@@ -22,13 +22,14 @@ struct view {
 };
 
 // Ambient occlusion (ao.c) then ground mist (atmos.c) into the world's colour, each 0 off, 1 on,
-// 2 alone ("show"), over one copy of its depth (post.c). Returns 0 when nothing could be drawn.
-int post_world(const struct view *v, int ao, int atmos);
+// 2 alone ("show"), over one copy of its depth (post.c); the mist at fog level `fog`, 1 Low to 5
+// Ultra. Returns 0 when nothing could be drawn.
+int post_world(const struct view *v, int ao, int atmos, int fog);
 
 // The passes themselves, inside post_world: the state is set aside, depth-tested drawing is off,
 // and `depth_tex` holds the world's depth. Each returns 0 and stays off after a failure.
 int ao_pass(const struct view *v, unsigned depth_tex, int show);
-int atmos_pass(const struct view *v, unsigned depth_tex, int show);
+int atmos_pass(const struct view *v, unsigned depth_tex, int show, int level);
 
 // GLSL 1.20 for the passes: the world's depth (`depth`, `size` in pixels) as distances. `proj` is
 // a, b, fx, fy and `range` the world's depth range (struct view); `depth_at` gives the window depth
