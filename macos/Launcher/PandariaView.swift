@@ -223,7 +223,7 @@ struct PandariaSettings: View {
         } header: {
             Text("Graphics")
         } footer: {
-            Text("Survivors' effects, added to the client. Ambient occlusion shades the corners and contact points of the world and replaces the client's own, which is turned off while it's on. Ground mist gathers in hollows and valleys and is lit by the sun through the trees. Both apply at the next Play.")
+            Text("Survivors' effects, added to the client. Ambient occlusion shades the corners and contact points of the world and replaces the client's own, which is turned off while it's on. Ground mist gathers in hollows and valleys and is lit by the sun through the trees. Both apply at the next Play; in the game, Control-Option-O and Control-Option-M switch them: on, off, then the effect alone.")
                 .font(.caption).foregroundStyle(.secondary)
         }
         .disabled(game.running)

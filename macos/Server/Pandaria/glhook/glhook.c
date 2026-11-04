@@ -10,6 +10,7 @@
 // GLHOOK_SHOT=<dir>: captures on request, see shot().
 // GLHOOK_AO=0: no ambient occlusion (ao.c); GLHOOK_AO=show: the occlusion alone.
 // GLHOOK_ATMOS=0: no ground mist (atmos.c); GLHOOK_ATMOS=show: the mist alone.
+// In the game, Control-Option-O and Control-Option-M cycle each: on, off, alone (see watch_keys).
 #include "post.h"
 #include <OpenGL/CGLContext.h>
 #include <OpenGL/OpenGL.h>
@@ -149,6 +150,39 @@ static void read_mode(int *mode, const char *var, const char *file) {
 static void read_modes(void) {
     read_mode(&ao_mode, "GLHOOK_AO", "ao-mode");
     read_mode(&atmos_mode, "GLHOOK_ATMOS", "atmos-mode");
+}
+
+// Control-Option-O (occlusion) and Control-Option-M (mist): on, then off, then the effect alone,
+// then on again. By the letter the layout types, so M is M on AZERTY too; the game never sees
+// these presses. The client's GLApplication takes its keys in its own sendEvent:, before any
+// AppKit event monitor, so that method is wrapped.
+static int next_mode(int mode) { return mode == 1 ? 0 : mode == 0 ? 2 : 1; }
+
+static void (*client_send_event)(id, SEL, id);
+
+static void send_event(id app, SEL sel, id event) {
+    // NSEventTypeKeyDown; Control and Option, without Shift or Command (NSEventModifierFlag*).
+    if (((unsigned long (*)(id, SEL))objc_msgSend)(event, sel_registerName("type")) == 10 &&
+        (((unsigned long (*)(id, SEL))objc_msgSend)(event, sel_registerName("modifierFlags")) & 0x1e0000) == 0xc0000) {
+        id chars = ((id(*)(id, SEL))objc_msgSend)(event, sel_registerName("charactersIgnoringModifiers"));
+        const char *c = chars ? ((const char *(*)(id, SEL))objc_msgSend)(chars, sel_registerName("UTF8String")) : NULL;
+        int *mode = !c ? NULL : !strcasecmp(c, "o") ? &ao_mode : !strcasecmp(c, "m") ? &atmos_mode : NULL;
+        if (mode) {
+            if (*mode < 0) read_modes();
+            *mode = next_mode(*mode);
+            fprintf(stderr, "glhook: %s %s\n", mode == &ao_mode ? "ambient occlusion" : "ground mist",
+                    *mode == 0 ? "off" : *mode == 2 ? "alone" : "on");
+            return;
+        }
+    }
+    client_send_event(app, sel, event);
+}
+
+static void watch_keys(void *unused) {
+    (void)unused;
+    id app = ((id(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSApplication"), sel_registerName("sharedApplication"));
+    Method m = app ? class_getInstanceMethod(object_getClass(app), sel_registerName("sendEvent:")) : NULL;
+    if (m && !client_send_event) client_send_event = (void (*)(id, SEL, id))method_setImplementation(m, (IMP)send_event);
 }
 
 // Whether the world's passes are wanted, and so the frame watched.
@@ -544,6 +578,8 @@ static void check_window(void) {
 }
 
 static CGLError hook_flush(CGLContextObj ctx) {
+    static int keys;
+    if (!keys) keys = 1, dispatch_async_f(dispatch_get_main_queue(), NULL, watch_keys);
     read_modes();
     check_window();
     static double last, window, worst, in_flush;
