@@ -11,6 +11,7 @@
 | Playing | **F** (from level 5) | your class's movement spell: Blink, Charge… aim at the cursor |
 | Playing | **C** | unlock / lock the camera |
 | Any | **G** | toggle the picture polish (`?grade=0` starts it off) |
+| Any | **O** | toggle ambient occlusion, the soft shading in creases and under units (`WOW_AO=0` starts it off) |
 | Playing | **Alt-Z** (⌥ Option-Z on a Mac) | hide / show the whole interface, for a clean screenshot; any other screen brings it back |
 | Playing | **mouse wheel** | zoom, from over the shoulder out to 70 yd |
 | Playing | **drag** (camera unlocked) | swing and tilt the camera |

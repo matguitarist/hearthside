@@ -5,6 +5,7 @@
 //! off ([`crate::run_mode::CaptureMode`]).
 
 mod abilities;
+mod ao;
 mod auto;
 mod bag;
 mod levelup;
@@ -57,6 +58,7 @@ impl Plugin for SurvivorsPlugin {
         }
         app.insert_resource(crate::run_mode::CaptureMode)
             .add_plugins(grade::plugin)
+            .add_plugins(ao::plugin)
             .add_plugins(hide_ui::plugin)
             .add_plugins(difficulty::plugin)
             .add_plugins(talents::plugin)
