@@ -467,19 +467,50 @@ enum PandariaClient {
     }
 
     /// In `WTF/Config.wtf`: `realmlist` and `patchlist`, the logon server the client dials, and
-    /// `SSAO`, the client's own ambient occlusion, off while ours replaces it.
+    /// `SSAO`, the client's own ambient occlusion, off while ours replaces it, and `gxResolution`
+    /// (see `windowSize`).
     static func writeRealm(_ address: String) throws {
         guard let folder else { return }
         let wtf = folder.appendingPathComponent("WTF", isDirectory: true)
         try FileManager.default.createDirectory(at: wtf, withIntermediateDirectories: true)
         let config = wtf.appendingPathComponent("Config.wtf")
         let old = (try? String(contentsOf: config, encoding: .utf8)) ?? ""
+        let size = windowSize(old)
         var lines = old.split(whereSeparator: \.isNewline).map(String.init).filter {
             let l = $0.lowercased()
             return !l.hasPrefix("set realmlist ") && !l.hasPrefix("set patchlist ") && !l.hasPrefix("set ssao ")
+                && (size == nil || !l.hasPrefix("set gxresolution "))
         }
         lines += ["SET realmlist \"\(address)\"", "SET patchlist \"\(address)\"", "SET SSAO \"\(occlusion ? 0 : 1)\""]
+        if let size { lines.append("SET gxResolution \"\(size)\"") }
         try (lines.joined(separator: "\n") + "\n").write(to: config, atomically: true, encoding: .utf8)
+    }
+
+    /// The screen's size in points for a windowed `gxResolution`, or nil to keep the config's. A
+    /// size the screen has no mode for (2560x1440 set on a bigger display, then played on a
+    /// 1920x1028 one) makes the client open a 6016x3384 window and show only its corner; and a
+    /// maximized window draws its frame at `gxResolution`, so it is kept at the screen's own size.
+    static func windowSize(_ config: String) -> String? {
+        guard let screen = NSScreen.main?.frame.size else { return nil }
+        func cvar(_ name: String) -> String? {
+            for line in config.split(whereSeparator: \.isNewline) {
+                let parts = line.split(separator: " ", maxSplits: 2)
+                if parts.count == 3, parts[0].lowercased() == "set", parts[1].lowercased() == name.lowercased() {
+                    return parts[2].trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+                }
+            }
+            return nil
+        }
+        let fit = "\(Int(screen.width))x\(Int(screen.height))"
+        let windowed = cvar("gxWindow") ?? "0" != "0"
+        let maximized = windowed && cvar("gxMaximize") ?? "0" != "0"
+        guard let current = cvar("gxResolution") else { return fit }
+        let wh = current.split(separator: "x").compactMap { Double($0) }
+        guard wh.count == 2 else { return fit }
+        // Fullscreen picks from the display's own modes, in pixels; leave that to the game.
+        if !windowed { return nil }
+        if maximized || wh[0] > screen.width || wh[1] > screen.height { return current == fit ? nil : fit }
+        return nil
     }
 
     /// This client's AzerothPlus and AzerothAdmin (`macos/Server/Pandaria/addons`), or with the
