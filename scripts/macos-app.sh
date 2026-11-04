@@ -117,22 +117,20 @@ find "$APP/Contents/Resources/Server" -name __pycache__ -prune -exec rm -rf {} +
 # Classic's shipped addons, installed into the game's AddOns folder by `Addons.swift`.
 ditto addons "$APP/Contents/Resources/AddOns"
 
-# Survivors' key art, a 1920×1080 HEIC of a run with its HUD hidden (Alt-Z); the icon from the
-# README's screenshot.
+# Survivors' key art, a 1920×1080 HEIC of a run with its HUD hidden (Alt-Z).
 cp macos/survivors.heic "$APP/Contents/Resources/"
-shot=docs/screenshots/combat.jpg
-tmp="$(mktemp -d)"
 # Classic's and Pandaria's, Blizzard's key art, kept out of the repository: from `macos/art/`
 # when this Mac has them (classic.heic, pandaria.heic), else those modes show Survivors'.
 for art in macos/art/*.heic; do [ ! -f "$art" ] || cp "$art" "$APP/Contents/Resources/"; done
-w=$(sips -g pixelWidth "$shot" | awk '/pixelWidth/ {print $2}')
-h=$(sips -g pixelHeight "$shot" | awk '/pixelHeight/ {print $2}')
-side=$(( w < h ? w : h ))
-sips -s format png -c "$side" "$side" "$shot" --out "$tmp/square.png" >/dev/null
+# The icon, a sword through a W on a globe: macos/Icon/globe.svg (ember.svg, the same emblem on a
+# warm tile, is the alternative), drawn at each size by AppKit.
+icon=macos/Icon/globe.svg
+tmp="$(mktemp -d)"
+xcrun swiftc -O macos/Icon/render.swift -o "$tmp/render"
 mkdir "$tmp/AppIcon.iconset"
 for s in 16 32 128 256 512; do
-    sips -z $s $s "$tmp/square.png" --out "$tmp/AppIcon.iconset/icon_${s}x${s}.png" >/dev/null
-    sips -z $((s * 2)) $((s * 2)) "$tmp/square.png" --out "$tmp/AppIcon.iconset/icon_${s}x${s}@2x.png" >/dev/null
+    "$tmp/render" "$icon" "$tmp/AppIcon.iconset/icon_${s}x${s}.png" $s
+    "$tmp/render" "$icon" "$tmp/AppIcon.iconset/icon_${s}x${s}@2x.png" $((s * 2))
 done
 iconutil -c icns "$tmp/AppIcon.iconset" -o "$APP/Contents/Resources/AppIcon.icns"
 rm -rf "$tmp"

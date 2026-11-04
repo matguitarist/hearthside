@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <radialGradient id="bg" cx="512" cy="780" r="720" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#6b2a0e"/>
+      <stop offset="0.45" stop-color="#2a130b"/>
+      <stop offset="1" stop-color="#0d0907"/>
+    </radialGradient>
+    <linearGradient id="gold" x1="0" y1="300" x2="0" y2="760" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fff0b8"/>
+      <stop offset="0.35" stop-color="#f0c055"/>
+      <stop offset="0.75" stop-color="#c47f22"/>
+      <stop offset="1" stop-color="#7d4612"/>
+    </linearGradient>
+    <linearGradient id="hilt" x1="0" y1="230" x2="0" y2="300" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fff0b8"/>
+      <stop offset="0.5" stop-color="#e2a43c"/>
+      <stop offset="1" stop-color="#8a5216"/>
+    </linearGradient>
+    <linearGradient id="steelL" x1="0" y1="290" x2="0" y2="880" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#c9d3df"/>
+    </linearGradient>
+    <linearGradient id="steelR" x1="0" y1="290" x2="0" y2="880" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#a9b6c6"/>
+      <stop offset="1" stop-color="#5e6b7c"/>
+    </linearGradient>
+    <linearGradient id="grip" x1="490" y1="0" x2="534" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#3b1c0c"/>
+      <stop offset="0.4" stop-color="#7a3b18"/>
+      <stop offset="1" stop-color="#2a1208"/>
+    </linearGradient>
+    <radialGradient id="gem" cx="504" cy="168" r="30" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffb3a0"/>
+      <stop offset="0.4" stop-color="#e0301e"/>
+      <stop offset="1" stop-color="#6a0a06"/>
+    </radialGradient>
+    <radialGradient id="glow" cx="512" cy="930" r="460" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ff8a2a" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#ff8a2a" stop-opacity="0"/>
+    </radialGradient>
+    <clipPath id="tile"><rect x="100" y="100" width="824" height="824" rx="185"/></clipPath>
+    <clipPath id="wtop"><rect x="0" y="300" width="1024" height="724"/></clipPath>
+  </defs>
+
+  <!-- tile -->
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#bg)"/>
+  <g clip-path="url(#tile)">
+    <rect x="100" y="100" width="824" height="824" fill="url(#glow)"/>
+  </g>
+  <rect x="112" y="112" width="800" height="800" rx="174" fill="none" stroke="#c98a2c" stroke-opacity="0.45" stroke-width="6"/>
+
+  <!-- W: outline, then gold -->
+  <g clip-path="url(#wtop)" fill="none" stroke-linejoin="miter" stroke-miterlimit="4" stroke-linecap="square">
+    <polyline points="258,300 388,656 512,396 636,656 766,300" stroke="#140a05" stroke-width="128" transform="translate(0,8)"/>
+    <polyline points="258,300 388,656 512,396 636,656 766,300" stroke="#140a05" stroke-width="124"/>
+    <polyline points="258,300 388,656 512,396 636,656 766,300" stroke="url(#gold)" stroke-width="100"/>
+  </g>
+  <!-- W's top serifs -->
+  <g stroke="#140a05" stroke-width="12">
+    <rect x="194" y="270" width="150" height="34" rx="6" fill="url(#hilt)"/>
+    <rect x="680" y="270" width="150" height="34" rx="6" fill="url(#hilt)"/>
+  </g>
+
+  <!-- sword, point down through the W -->
+  <g stroke-linejoin="round">
+    <!-- blade outline and halves -->
+    <path d="M478,290 L546,290 L546,770 L512,872 L478,770 Z" fill="#140a05" stroke="#140a05" stroke-width="20"/>
+    <path d="M478,290 L512,290 L512,872 L478,770 Z" fill="url(#steelL)"/>
+    <path d="M512,290 L546,290 L546,770 L512,872 Z" fill="url(#steelR)"/>
+    <line x1="512" y1="300" x2="512" y2="760" stroke="#7d8a9a" stroke-width="5"/>
+    <!-- grip -->
+    <rect x="492" y="182" width="40" height="96" rx="8" fill="url(#grip)" stroke="#140a05" stroke-width="10"/>
+    <g stroke="#c8892c" stroke-width="5" opacity="0.8">
+      <line x1="494" y1="204" x2="530" y2="196"/>
+      <line x1="494" y1="226" x2="530" y2="218"/>
+      <line x1="494" y1="248" x2="530" y2="240"/>
+    </g>
+    <!-- crossguard -->
+    <path d="M372,262 Q392,244 430,262 L594,262 Q632,244 652,262 Q640,300 600,296 L424,296 Q384,300 372,262 Z"
+          fill="url(#hilt)" stroke="#140a05" stroke-width="12"/>
+    <circle cx="512" cy="279" r="20" fill="url(#gem)" stroke="#140a05" stroke-width="8"/>
+    <!-- pommel -->
+    <circle cx="512" cy="168" r="34" fill="url(#hilt)" stroke="#140a05" stroke-width="12"/>
+    <circle cx="512" cy="168" r="17" fill="url(#gem)"/>
+  </g>
+</svg>
