@@ -151,12 +151,15 @@ struct PandariaSettings: View {
     @Environment(\.openWindow) private var openWindow
     @AppStorage("settingsPane") private var settingsPane = SettingsPane.general
     @AppStorage(Prefs.pandariaFolderKey) private var folderPath = ""
+    @AppStorage(Prefs.pandariaOcclusionKey) private var occlusion = true
+    @AppStorage(Prefs.pandariaMistKey) private var mist = true
     @State private var newAccount = false
     @State private var passwordFor: String?
 
     var body: some View {
         Form {
             client
+            graphics
             server
             if pandaria.isSetUp { accounts }
         }
@@ -208,9 +211,22 @@ struct PandariaSettings: View {
         } header: {
             Text("Client")
         } footer: {
-            Text("Your own World of Warcraft 5.4.8 for Mac. The first Play prepares it: it is patched to sign in to your server and to run on Apple silicon, its graphics get fixes and AMD FSR sharpening, and it gets AzerothPlus and AzerothAdmin for 5.4.8. Preparing needs Apple's command line developer tools.")
+            Text("Your own World of Warcraft 5.4.8 for Mac. The first Play prepares it: it is patched to sign in to your server and to run on Apple silicon, its graphics get fixes, AMD FSR sharpening, ambient occlusion and ground mist, and it gets AzerothPlus and AzerothAdmin for 5.4.8. Preparing needs Apple's command line developer tools.")
                 .font(.caption).foregroundStyle(.secondary)
         }
+    }
+
+    private var graphics: some View {
+        Section {
+            Toggle("Ambient occlusion", isOn: $occlusion)
+            Toggle("Ground mist", isOn: $mist)
+        } header: {
+            Text("Graphics")
+        } footer: {
+            Text("Survivors' effects, added to the client. Ambient occlusion shades the corners and contact points of the world and replaces the client's own, which is turned off while it's on. Ground mist gathers in hollows and valleys and is lit by the sun through the trees. Both apply at the next Play.")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+        .disabled(game.running)
     }
 
     /// Read again as the folder changes.

@@ -416,10 +416,32 @@ enum PandariaClient {
         return FileManager.default.fileExists(atPath: app.appendingPathComponent("Contents/Frameworks/glhook.dylib").path)
     }
 
-    /// The first time, `prepare`; after, the realm and the addons only.
+    /// Whether its fixes were built from this version's `glhook` sources: `mac-client-setup` leaves
+    /// their digest in the app (`cat glhook/*.[ch] | shasum -a 256`).
+    static var isCurrent: Bool {
+        guard let app,
+              let built = try? String(contentsOf: app.appendingPathComponent("Contents/Resources/glhook.sources"), encoding: .utf8),
+              let dir = Bundle.main.url(forResource: "Server", withExtension: nil)?.appendingPathComponent("Pandaria/glhook"),
+              let names = try? FileManager.default.contentsOfDirectory(atPath: dir.path)
+        else { return false }
+        var hash = SHA256()
+        for name in names.filter({ $0.hasSuffix(".c") || $0.hasSuffix(".h") }).sorted() {
+            guard let data = try? Data(contentsOf: dir.appendingPathComponent(name)) else { return false }
+            hash.update(data: data)
+        }
+        let digest = hash.finalize().map { String(format: "%02x", $0) }.joined()
+        return built.trimmingCharacters(in: .whitespacesAndNewlines) == digest
+    }
+
+    /// Ambient occlusion and ground mist, glhook's own passes (Settings › Pandaria), on by default.
+    static var occlusion: Bool { UserDefaults.standard.object(forKey: Prefs.pandariaOcclusionKey) as? Bool ?? true }
+    static var mist: Bool { UserDefaults.standard.object(forKey: Prefs.pandariaMistKey) as? Bool ?? true }
+
+    /// The first time, or after an update changed the fixes, `prepare`; else the realm, the
+    /// settings and the addons only.
     static func ready(realm: String) async throws {
         if let problem { throw ServerError(problem) }
-        if !isPrepared {
+        if !isPrepared || !isCurrent {
             try await prepare(realm: realm)
             return
         }
@@ -440,10 +462,12 @@ enum PandariaClient {
             throw ServerError("Preparing the client needs Apple's command line developer tools. Install them (Terminal: xcode-select --install), then press Play again.")
         }
         try await Docker.run(URL(fileURLWithPath: "/bin/bash"), [script.path, app.path, folder.path, realm])
+        try writeRealm(realm)
         installAddons()
     }
 
-    /// `realmlist` and `patchlist` in `WTF/Config.wtf`, the logon server the client dials.
+    /// In `WTF/Config.wtf`: `realmlist` and `patchlist`, the logon server the client dials, and
+    /// `SSAO`, the client's own ambient occlusion, off while ours replaces it.
     static func writeRealm(_ address: String) throws {
         guard let folder else { return }
         let wtf = folder.appendingPathComponent("WTF", isDirectory: true)
@@ -452,9 +476,9 @@ enum PandariaClient {
         let old = (try? String(contentsOf: config, encoding: .utf8)) ?? ""
         var lines = old.split(whereSeparator: \.isNewline).map(String.init).filter {
             let l = $0.lowercased()
-            return !l.hasPrefix("set realmlist ") && !l.hasPrefix("set patchlist ")
+            return !l.hasPrefix("set realmlist ") && !l.hasPrefix("set patchlist ") && !l.hasPrefix("set ssao ")
         }
-        lines += ["SET realmlist \"\(address)\"", "SET patchlist \"\(address)\""]
+        lines += ["SET realmlist \"\(address)\"", "SET patchlist \"\(address)\"", "SET SSAO \"\(occlusion ? 0 : 1)\""]
         try (lines.joined(separator: "\n") + "\n").write(to: config, atomically: true, encoding: .utf8)
     }
 

@@ -5,8 +5,9 @@
 #
 # Copies the app into the game folder (it reads `Data/` beside itself), patches its connection
 # checks if they are not already (`mac-client-patch.py`), points its unused `libcrypto.0.9.8`
-# (removed from macOS; the game imports nothing from it) at `glhook.dylib`, our OpenGL fixes and FSR,
-# signs it ad hoc so Rosetta runs it, writes the realm list, and installs our addons. The binary is
+# (removed from macOS; the game imports nothing from it) at `glhook.dylib`, our OpenGL fixes, FSR,
+# ambient occlusion and ground mist (with a digest of its sources in `Resources/glhook.sources`, by
+# which the launcher sees an older build and prepares the client again), signs it ad hoc so Rosetta runs it, writes the realm list, and installs our addons. The binary is
 # Intel only: it needs Rosetta 2.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
@@ -30,7 +31,8 @@ rm -f "$bin.orig"
 
 hook=@executable_path/../Frameworks/glhook.dylib
 xcrun clang -arch x86_64 -dynamiclib -O2 -Wno-deprecated-declarations -framework OpenGL -framework CoreGraphics \
-    -lobjc "$here/glhook/glhook.c" "$here/glhook/fsr.c" -o "$app/Contents/Frameworks/glhook.dylib" -install_name "$hook"
+    -lobjc "$here"/glhook/*.c -o "$app/Contents/Frameworks/glhook.dylib" -install_name "$hook"
+cat "$here"/glhook/*.[ch] | shasum -a 256 | cut -d' ' -f1 > "$app/Contents/Resources/glhook.sources"
 xcrun install_name_tool -change /usr/lib/libcrypto.0.9.8.dylib "$hook" "$bin" 2>/dev/null || true
 xcrun otool -L "$bin" | grep glhook.dylib >/dev/null || { echo "glhook.dylib is not loaded by $bin" >&2; exit 1; }
 codesign --force --deep --sign - "$app"

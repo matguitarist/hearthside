@@ -112,9 +112,12 @@ The launcher:
   new password), administrators `account_access` gmlevel 3 on every realm (-1); the `RNDBOT`
   accounts are left out and counted as bots online. The first Play prepares the client with
   `mac-client-setup` (the connection patches of `mac-client-patch.py`, `glhook.dylib` with the
-  OpenGL fixes and FSR in place of the removed `libcrypto.0.9.8`, an ad hoc signature, the
-  realmlist, the addons); it runs under Rosetta and needs the command line developer tools. Later
-  Plays only write the realmlist and the addons. Its logs (`storage/logs`) are in the Logs window.
+  OpenGL fixes, FSR, and Survivors' ambient occlusion and ground mist in place of the removed
+  `libcrypto.0.9.8`, an ad hoc signature, the realmlist, the addons); it runs under Rosetta and
+  needs the command line developer tools. Later Plays only write the realmlist, `SSAO` (the
+  client's own, off while ours is on) and the addons, unless the app's `glhook` sources changed
+  (their digest is in the client's `Resources/glhook.sources`): then it is prepared again.
+  Settings › Pandaria turns the two effects off through `GLHOOK_AO` and `GLHOOK_ATMOS`. Its logs (`storage/logs`) are in the Logs window.
 - **Installs AzerothPlus and AzerothAdmin** for Classic (`Addons.swift`, Settings › General):
   before each Classic launch the shipped addons replace their folders in `benilla-config/AddOns`,
   so the app's version is the one that runs; other addons there are untouched, and saved settings

@@ -13,11 +13,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "fsr.h"
-
-static const char *vertex_src =
-    "#version 120\n"
-    "void main() { gl_Position = gl_Vertex; }\n";
+#include "post.h"
 
 static const char *easu_src =
     "#version 120\n"
@@ -94,26 +90,6 @@ static const char *rcas_src =
     "  gl_FragColor = vec4((lobe * (b + d + f + h) + e) / (4.0 * lobe + 1.0), 1.0);\n"
     "}\n";
 
-static GLuint program(const char *fragment_src) {
-    GLuint p = glCreateProgram(), shaders[2] = {glCreateShader(GL_VERTEX_SHADER), glCreateShader(GL_FRAGMENT_SHADER)};
-    const char *srcs[2] = {vertex_src, fragment_src};
-    for (int i = 0; i < 2; i++) {
-        glShaderSource(shaders[i], 1, &srcs[i], NULL);
-        glCompileShader(shaders[i]);
-        glAttachShader(p, shaders[i]);
-    }
-    glLinkProgram(p);
-    GLint ok = 0;
-    glGetProgramiv(p, GL_LINK_STATUS, &ok);
-    if (!ok) {
-        char log[2048] = "";
-        for (int i = 0; i < 2; i++) glGetShaderInfoLog(shaders[i], sizeof log, NULL, log), fputs(log, stderr);
-        fprintf(stderr, "glhook: FSR shaders failed, falling back to the client's blit\n");
-        return 0;
-    }
-    return p;
-}
-
 // A texture and a framebuffer around it, (re)sized to w x h.
 struct target { GLuint tex, fbo; int w, h; };
 
@@ -129,12 +105,6 @@ static void size_target(struct target *t, int w, int h) {
     glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, t->fbo);
     glFramebufferTexture2DEXT(GL_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT0_EXT, GL_TEXTURE_2D, t->tex, 0);
     t->w = w, t->h = h;
-}
-
-static void quad(void) {
-    glBegin(GL_TRIANGLE_STRIP);
-    glVertex2f(-1, -1), glVertex2f(1, -1), glVertex2f(-1, 1), glVertex2f(1, 1);
-    glEnd();
 }
 
 int fsr_blit(int sx0, int sy0, int sx1, int sy1, int dx0, int dy0, int dx1, int dy1) {
@@ -178,8 +148,8 @@ int fsr_blit(int sx0, int sy0, int sx1, int sy1, int dx0, int dy0, int dx1, int 
     glPushClientAttrib(GL_CLIENT_ALL_ATTRIB_BITS);
     glActiveTexture(GL_TEXTURE0);
 
-    if (!easu && !(easu = program(easu_src))) failed = 1;
-    if (!failed && !rcas && !(rcas = program(rcas_src))) failed = 1;
+    if (!easu && !(easu = post_program("FSR", easu_src))) failed = 1;
+    if (!failed && !rcas && !(rcas = post_program("FSR", rcas_src))) failed = 1;
     if (sharpness < 0) {
         // In stops: 0 is the most, each 1 halves it; AMD's default is 0.2.
         const char *s = getenv("GLHOOK_SHARPNESS");
@@ -227,7 +197,7 @@ int fsr_blit(int sx0, int sy0, int sx1, int sy1, int dx0, int dy0, int dx1, int 
         glUniform2f(glGetUniformLocation(easu, "in_size"), sw, sh);
         glUniform2f(glGetUniformLocation(easu, "scale"), (float)sw / dw, (float)sh / dh);
         glUniform2f(glGetUniformLocation(easu, "origin"), 0, 0);
-        quad();
+        post_quad();
 
         glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, draw_fbo);
         glViewport(dx0, dy0, dw, dh);
@@ -237,7 +207,7 @@ int fsr_blit(int sx0, int sy0, int sx1, int sy1, int dx0, int dy0, int dx1, int 
         glUniform2f(glGetUniformLocation(rcas, "size"), dw, dh);
         glUniform2f(glGetUniformLocation(rcas, "origin"), dx0, dy0);
         glUniform1f(glGetUniformLocation(rcas, "sharpness"), sharpness);
-        quad();
+        post_quad();
     }
 
     glUseProgram(prog);
