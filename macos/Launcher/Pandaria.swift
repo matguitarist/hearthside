@@ -144,8 +144,9 @@ final class PandariaServer: ObservableObject {
               echo "$s=$(docker inspect -f '{{.State.Status}}' \(p)-$s-1 2>/dev/null)"
             done
             ip=$(sed -n 's/^LAN_IP=//p' .env 2>/dev/null)
+            port=$(sed -n 's/^WORLD_PORT=//p' .env 2>/dev/null)
             if [ "$(docker inspect -f '{{.State.Status}}' \(p)-worldserver-1 2>/dev/null)" = running ] && [ -n "$ip" ] \\
-              && timeout 2 bash -c "</dev/tcp/$ip/8085" 2>/dev/null; then echo world=up; fi
+              && timeout 2 bash -c "</dev/tcp/$ip/${port:-8085}" 2>/dev/null; then echo world=up; fi
             """
         var out: [String: String] = [:]
         for line in try await home.ssh(script, quiet: true).split(whereSeparator: \.isNewline) {

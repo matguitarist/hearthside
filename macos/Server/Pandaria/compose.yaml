@@ -1,5 +1,6 @@
 # The Pandaria server on the home server: authserver, worldserver and MySQL 8.0, ports on the LAN
-# address only. It takes the same ports as the CMaNGOS server (3724, 8085), so one runs at a time.
+# address only. It takes the same ports as the CMaNGOS server (3724, and the world's: WORLD_PORT in
+# `.env`, see `home-compose`), so one runs at a time.
 
 name: azeroth-survivors-pandaria
 
@@ -47,7 +48,7 @@ services:
     stop_grace_period: 2m
     stdin_open: true
     ports:
-      - ${LAN_IP}:8085:8085
+      - ${LAN_IP}:${WORLD_PORT:-8085}:8085
     volumes:
       - ./storage/data:/data:ro
       - ./storage/logs:/logs

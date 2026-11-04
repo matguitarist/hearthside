@@ -18,7 +18,7 @@ services:
   mangosd:
     restart: unless-stopped
     ports: !override
-      - ${LAN_IP:?set LAN_IP in .env}:8085:8085
+      - ${LAN_IP:?set LAN_IP in .env}:${WORLD_PORT:-8085}:8085
   install:
     environment:
       - REALM_ADDRESS=${LAN_IP:?set LAN_IP in .env}

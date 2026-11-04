@@ -7,11 +7,25 @@ cd "$(dirname "$0")"
 p=azeroth-survivors-pandaria
 f=(-p "$p" -f compose.yaml)
 d=$PWD
+# The world's port on the host, `WORLD_PORT` in `.env`: 8085, the game's own, unless something
+# else on the server holds it (CrowdSec's API does by default), then the next free one. Chosen once.
+touch .env
+if ! grep -q '^WORLD_PORT=' .env; then
+    port=8085
+    while ss -Hltn "sport = :$port" 2>/dev/null | grep -q .; do port=$((port + 1)); done
+    echo "WORLD_PORT=$port" >>.env
+fi
+port=$(sed -n 's/^WORLD_PORT=//p' .env)
 if docker compose version >/dev/null 2>&1; then
     docker compose "${f[@]}" "$@"
 else
     docker run --rm -i -v /var/run/docker.sock:/var/run/docker.sock -v "$d:$d" -w "$d" docker:29-cli \
         docker compose "${f[@]}" "$@"
+fi
+
+# The realm list tells clients the port: kept in step with WORLD_PORT after an `up`.
+if [[ " $* " == " up "* ]]; then
+    docker exec $p-database-1 mysql -uroot -ppassword auth -e "UPDATE realmlist SET port = $port WHERE id = 1;" 2>/dev/null || true
 fi
 
 # Unraid's autostart list, kept as the CMaNGOS server keeps it: an `up` puts the containers it
