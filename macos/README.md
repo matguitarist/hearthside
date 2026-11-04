@@ -181,6 +181,11 @@ signs ad-hoc: the app runs on the Mac that built it, with updates off.
    | `MACOS_CERT_P12`, `MACOS_CERT_PASSWORD` | the Developer ID Application certificate and key, exported from Keychain Access as .p12 |
    | `NOTARY_APPLE_ID`, `NOTARY_PASSWORD`, `NOTARY_TEAM_ID` | the Apple ID, an app-specific password for it, and the team |
    | `SPARKLE_PRIVATE_KEY` | the update signing key, exported from the keychain |
+   | `MACOS_ART_KEY` | the passphrase of `macos/art.tar.enc`: Classic's and Pandaria's key art (Blizzard's, so not in the repository in the clear), decrypted into `macos/art/` |
+
+   To change the art, put the new `classic.heic` and `pandaria.heic` in `macos/art/` and
+   re-encrypt with the same key:
+   `tar -C macos/art -cf - classic.heic pandaria.heic | openssl enc -aes-256-cbc -pbkdf2 -salt -pass file:<key file> -out macos/art.tar.enc`.
 
    An App Store Connect API key works for notarization instead: set `NOTARY_KEY_P8` (the .p8
    file's contents), `NOTARY_KEY_ID` and `NOTARY_ISSUER`.
@@ -197,5 +202,7 @@ signs ad-hoc: the app runs on the Mac that built it, with updates off.
    the zip and `appcast.xml`. Installed apps see the update on their next check.
 
 A release can also be made locally with `make release-mac` and uploaded with
-`gh release create v<version> target/macos/dist/*`. Only the latest non-draft, non-prerelease
+`gh release create v<version> target/macos/dist/*`. The workflow then leaves that release's files
+alone (the local build is arm64 only); to ship the universal build, push the tag without
+uploading. Only the latest non-draft, non-prerelease
 release's `appcast.xml` is the live feed.

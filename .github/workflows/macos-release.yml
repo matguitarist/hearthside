@@ -65,6 +65,20 @@ jobs:
         with:
           ref: ${{ github.event.inputs.tag || github.ref }}
 
+      - name: Decrypt Classic's and Pandaria's key art into macos/art/
+        env:
+          ART_KEY: ${{ secrets.MACOS_ART_KEY }}
+        run: |
+          if [ -z "$ART_KEY" ]; then
+            echo "::warning::no MACOS_ART_KEY: Classic and Pandaria will show Survivors' art"
+          else
+            mkdir -p macos/art
+            printf %s "$ART_KEY" > "$RUNNER_TEMP/art.key"
+            openssl enc -d -aes-256-cbc -pbkdf2 -pass "file:$RUNNER_TEMP/art.key" -in macos/art.tar.enc | tar -C macos/art -xf -
+            rm "$RUNNER_TEMP/art.key"
+            ls macos/art
+          fi
+
       - name: Import the Developer ID certificate
         env:
           CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
@@ -135,7 +149,13 @@ jobs:
             if [ -f target/macos/release-notes.md ]; then notes=(--notes-file target/macos/release-notes.md); else notes=(--generate-notes); fi
             gh release create "$TAG" --title "Hearthside ${TAG#v}" "${notes[@]}"
           fi
-          gh release upload "$TAG" target/macos/dist/* --clobber
+          # A release published from a Mac (`make release-mac`) keeps its files: that build carries
+          # Classic's and Pandaria's key art from `macos/art/`, which this checkout has not.
+          if [ -n "$(gh release view "$TAG" --json assets --jq '.assets[].name')" ]; then
+            echo "::notice::$TAG already has its files; not replacing them"
+          else
+            gh release upload "$TAG" target/macos/dist/*
+          fi
 
       - name: Clean up keys
         if: always()
