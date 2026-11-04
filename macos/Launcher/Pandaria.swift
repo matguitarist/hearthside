@@ -49,7 +49,8 @@ final class PandariaServer: ObservableObject {
     /// The level of an administrator (`SEC_ADMINISTRATOR`), as `pandaria-account --gm` sets it.
     let adminLevel = 3
     /// The recipe's files the launcher keeps current on the server.
-    private static let scripts = ["home-compose", "home-setup", "compose.yaml", "pandaria-install", "Dockerfile", ".dockerignore"]
+    private static let scripts = ["home-compose", "home-setup", "compose.yaml", "pandaria-install", "Dockerfile", ".dockerignore",
+                                  "worldserver-start", "worldmaps.py"]
 
     private var home: HomeServer { .shared }
     private var setUpDone = false

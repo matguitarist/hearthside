@@ -12,6 +12,8 @@ trap '[ -f .setup-done ] || touch .setup-failed; rm -f .setup-pid' EXIT
 dc() { ./home-compose "$@"; }
 step() { echo "$1" > .setup-step; echo "== $(date '+%F %T') $1"; shift; "$@"; }
 build() { docker image inspect azeroth-survivors-pandaria:1 >/dev/null 2>&1 || docker buildx build --load -t azeroth-survivors-pandaria:1 .; }
+# The dashboard does without them, should they fail.
+worldmaps() { dc --profile tools run --rm -T worldmaps || echo "no world maps for the dashboard"; }
 maps() { ls storage/data/maps 2>/dev/null | grep -q '\.map$' || dc --profile tools run --rm -T extract; }
 # The other server takes the same ports: it stops for this one.
 other() { [ ! -x ../azeroth-survivors-cmangos/home-compose ] || ../azeroth-survivors-cmangos/home-compose stop realmd mangosd database; }
@@ -20,6 +22,7 @@ mkdir -p storage/logs storage/data storage/extract
 step "Building the server from source (a few hours)…" build
 step "Building the databases…" dc --profile tools run --rm -T install
 step "Reading the maps from the game files…" maps
+step "Drawing the dashboard's world maps…" worldmaps
 step "Stopping the Classic server…" other
 step "Starting the server and making its bots…" dc up -d database authserver worldserver
 touch .setup-done

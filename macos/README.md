@@ -80,13 +80,25 @@ The launcher:
   (`AHBot_`) settings, the stock by scaling every `AhBot.MaxAuctionCount` in `ahbot.conf` from its
   pristine copy as `mangosd` starts, then recreate `mangosd`; bringing bots to players also
   shortens how often they move on (`BOTS_MOVE_MIN`, `BOTS_MOVE_MAX`). The launcher keeps the
-  server's scripts and compose files current on each look. `home-status` writes the server's state
-  (players, bots by level and where they are, auctions, CPU and memory, backups, software,
-  settings, the latest real errors)
+  server's scripts and compose files current on each look. `home-status` writes the state of this
+  server and of the Pandaria one beside it (players, bots by level and where they are, auctions,
+  CPU and memory, backups, software, settings, the latest real errors)
   into `storage/dashboard/` every minute from cron, with a day of history, and the `dashboard`
-  container (`nginx`, read-only, no Docker socket or database password) serves it with
-  `dashboard.html` at `http://<LAN_IP>:8095` for any browser at home; it stays up while the game is
-  stopped; its world map shows every bot and player on the two continents, over map pictures the
+  container (`dashboard.py` on `python:alpine`, the files read-only, no Docker socket or database
+  password) serves it with `dashboard.html` at `http://<LAN_IP>:8095` for any browser at home; it
+  stays up while the game is stopped. Anyone at home can look; its Start, Stop, Restart and Back
+  Up Now buttons and its settings editor need a sign-in, against a PBKDF2 hash in
+  `storage/dashboard-auth/` that Dashboard Password… (Settings › Home Server) sets through
+  `home-status password`; with none set, nobody can sign in. Each request is a file named for the
+  server and action in `storage/dashboard-requests/` (settings as `KEY=value` lines, checked by
+  `dashboard.py` and again by the host against each server's own keys), which the same cron job
+  (`home-status tick`, polling for the rest of its minute) carries out within a few seconds, its
+  progress in `action.json`; a settings change restarts a running server. Pandaria's settings
+  (`BOTS`, `BOTS_SYNC_LEVEL`, `MAP_THREADS`, the rates) go into its `.env`, which
+  `worldserver-start` writes into the image's configs at each start. Pandaria's world maps are
+  drawn on the server from its client's MPQs by the `worldmaps` service (`worldmaps.py`: StormLib
+  and Pillow; the tiles are in `locale-enUS.MPQ`), at setup or, for an older setup, once by
+  `home-status schedule`. The Classic world map shows every bot and player on the two continents, over map pictures the
   launcher draws from this Mac's game files (`warcraft-survivors --world-maps`) and copies over,
   as none ship in the repository. Settings › Home Server shows the same live, with Open Dashboard. Nothing is forwarded to the internet. `home-backup` dumps the accounts and characters
   nightly at 4:30 (a dynamix cron file on Unraid, else root's crontab; to
@@ -107,7 +119,8 @@ The launcher:
   `macos/Server/Pandaria` and the client's `Data` (about 23 GB) there, writes `LAN_IP` and
   `CLIENT_DATA` to `.env`, and starts `home-setup` detached, as for CMaNGOS: the image built from
   source (a few hours), `install`, the maps read from the client, then the servers, each step
-  skipped once done. Accounts are SQL fed to `docker exec` of its database:
+  skipped once done. The worldserver writes `BOTS` from `.env` (300 unless set; the release's
+  `playerbots.conf` has 500) into its config on each start. Accounts are SQL fed to `docker exec` of its database:
   `sha_pass_hash` = SHA1(`NAME:PASSWORD`) uppercased, computed on the Mac (`v`, `s` cleared on a
   new password), administrators `account_access` gmlevel 3 on every realm (-1); the `RNDBOT`
   accounts are left out and counted as bots online. The first Play prepares the client with

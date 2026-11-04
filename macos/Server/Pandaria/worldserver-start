@@ -1,0 +1,25 @@
+#!/bin/bash
+# The worldserver's start, in its container: the settings in `.env` (passed as its environment;
+# the dashboard and `home-status` write them) into the image's configs, then the server. A key
+# left unset keeps the config's own value, but for BOTS: 300, where the release has 500 (they
+# gather near the players, so a few hundred keep the world busy at a fraction of the CPU).
+set -euo pipefail
+cd /opt/pandaria/etc
+# `conf <file> <value> <key>…`: each key's line set to the value, when there is a value.
+conf() {
+    local file=$1 value=$2 key
+    shift 2
+    [ -n "$value" ] || return 0
+    for key in "$@"; do sed -i "s/^${key//./\\.} *=.*/$key = $value/" "$file"; done
+}
+conf playerbots.conf "${BOTS:-300}" AiPlayerbot.MinRandomBots AiPlayerbot.MaxRandomBots
+conf playerbots.conf "${BOTS_SYNC_LEVEL:-}" AiPlayerbot.SyncLevelWithPlayers
+conf worldserver.conf "${RATE_XP:-}" Rate.XP.Kill Rate.XP.Quest Rate.XP.Explore
+conf worldserver.conf "${RATE_LOOT:-}" Rate.Drop.Item.Poor Rate.Drop.Item.Normal Rate.Drop.Item.Uncommon \
+    Rate.Drop.Item.Rare Rate.Drop.Item.Epic Rate.Drop.Item.Legendary Rate.Drop.Item.Artifact
+conf worldserver.conf "${RATE_GOLD:-}" Rate.Drop.Money
+conf worldserver.conf "${RATE_REPUTATION:-}" Rate.Reputation.Gain
+conf worldserver.conf "${RATE_REST:-}" Rate.Rest.InGame Rate.Rest.Offline.InTavernOrCity Rate.Rest.Offline.InWilderness
+conf worldserver.conf "${MAP_THREADS:-}" MapUpdate.Threads
+cd /opt/pandaria/bin
+exec ./worldserver

@@ -101,7 +101,7 @@ enum HelpTopic: String, CaseIterable, Identifiable {
              .h("Bots & Rates"),
              .p("The number of bots (each 100 take about 1 GB of memory), whether they come to the zones where people play, whether they stay near the players' level, and the experience, loot, gold, reputation and rested rates, and the auction house bot: whether it trades, its prices and how much it stocks. **Apply** restarts the game server once for all of them."),
              .h("Dashboard"),
-             .p("**Open Dashboard** (Server menu) shows the server in any browser at home: who is playing, the bots by level and on a world map, memory and CPU over the last day, backups and settings."),
+             .p("**Open Dashboard** (Server menu) shows the Classic and Pandaria servers in any browser at home: who is playing, the bots by level and on a world map, memory and CPU over the last day, backups and settings. Anyone at home can look. To start, stop or restart a server, back up Classic, or change the bots, rates and Pandaria's world threads there, sign in with the password **Dashboard Password…** sets in Settings › Home Server."),
              .h("Backups & Updates"),
              .p("Every night at 4:30 the server saves its accounts and characters and keeps the last 14. **Back Up Now** and **Restore…** are in **Settings › Backups & Updates**; a restore saves the current state first. **Check for Updates** compares the server with the newest CMaNGOS; **Update Server…** rebuilds it, keeps everyone's characters, and puts the old server back if anything fails.")]
         case .pandaria:

@@ -23,11 +23,17 @@ services:
     environment:
       - REALM_ADDRESS=${LAN_IP:?set LAN_IP in .env}
   # The dashboard, for any browser at home: the files `home-status` writes every minute, served
-  # read-only. It stays up while the game is stopped, to say so.
+  # read-only, and, once signed in, its buttons' and settings' requests (`dashboard.py`). It stays
+  # up while the game is stopped, to say so and to start it.
   dashboard:
-    image: nginx:1.27-alpine
+    image: python:3.13-alpine
     restart: unless-stopped
+    init: true
+    command: ['python3', '/dashboard.py']
     ports:
       - ${LAN_IP:?set LAN_IP in .env}:8095:80
     volumes:
-      - ./storage/dashboard:/usr/share/nginx/html:ro
+      - ./dashboard.py:/dashboard.py:ro
+      - ./storage/dashboard:/site:ro
+      - ./storage/dashboard-requests:/requests
+      - ./storage/dashboard-auth:/auth

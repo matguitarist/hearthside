@@ -3,9 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Azeroth Server</title>
-<!-- The home server's dashboard: `home-status` writes status.json and history.tsv beside this page
-     every minute; it reads them every 30 seconds. Self-contained, no outside requests. -->
+<title>Azeroth Servers</title>
+<!-- The home server's dashboard, for its Classic and Pandaria servers: `home-status` writes
+     status.json and the history files beside this page every minute; it reads them every 30
+     seconds, and its buttons ask `dashboard.py` to start, stop or restart a server. Self-contained,
+     no outside requests. -->
 <style>
 :root {
   --bg: #f5f5f7; --card: #ffffff; --text: #1d1d1f; --dim: #6e6e73; --line: #e5e5ea;
@@ -52,6 +54,7 @@ svg.spark path.line { fill: none; stroke: var(--bar); stroke-width: 2; vector-ef
 svg.spark path.area { fill: var(--bar); opacity: .12; }
 .errors { font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--red);
           white-space: pre-wrap; word-break: break-word; margin: 0; }
+.errors.log { color: var(--dim); }
 .ok { color: var(--green); }
 .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; background: var(--line); font-size: 12px; margin: 2px 4px 2px 0; }
 code { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
@@ -60,7 +63,9 @@ code { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
 .card h2 .tabs { float: right; text-transform: none; letter-spacing: 0; }
 .tabs button { font: inherit; font-size: 13px; color: var(--dim); background: none; border: 1px solid var(--line);
                padding: 2px 10px; cursor: pointer; }
-.tabs button:first-child { border-radius: 999px 0 0 999px; } .tabs button:last-child { border-radius: 0 999px 999px 0; margin-left: -1px; }
+.tabs button + button { margin-left: -1px; }
+.tabs button:first-child { border-radius: 999px 0 0 999px; } .tabs button:last-child { border-radius: 0 999px 999px 0; }
+.tabs { display: inline-flex; flex-wrap: wrap; row-gap: 4px; }
 .tabs button.on { color: var(--text); background: var(--line); }
 .map { position: relative; aspect-ratio: 1002 / 668; border-radius: 10px; overflow: hidden; background: var(--line); }
 .map img, .map svg { position: absolute; inset: 0; width: 100%; height: 100%; }
@@ -69,17 +74,80 @@ code { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
 .map svg circle.player { fill: #0a84ff; stroke: #fff; stroke-width: 1.5; }
 .map svg text { font: 600 13px -apple-system, BlinkMacSystemFont, sans-serif; fill: #fff; stroke: #000; stroke-width: 3; paint-order: stroke; }
 .map .missing { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 20px; text-align: center; color: var(--dim); }
+.servers { display: inline-flex; gap: 0; }
+.servers button { font: inherit; font-weight: 600; display: inline-flex; align-items: center; gap: 8px; padding: 5px 14px;
+                  background: var(--card); color: var(--dim); border: 1px solid var(--line); cursor: pointer; }
+.servers button:first-child { border-radius: 999px 0 0 999px; }
+.servers button:last-child { border-radius: 0 999px 999px 0; margin-left: -1px; }
+.servers button.on { color: var(--text); background: var(--line); }
+.servers button[hidden] { display: none; }
+.servers button:only-child, .servers button:has(+ button[hidden]) { border-radius: 999px; }
+.controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.controls .state { font-weight: 600; }
+.controls .buttons { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+.btn { font: inherit; font-size: 14px; padding: 6px 14px; border-radius: 8px; border: 1px solid var(--line);
+       background: var(--bg); color: var(--text); cursor: pointer; }
+.btn:hover:not(:disabled) { border-color: var(--accent); }
+.btn:disabled { opacity: .45; cursor: default; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.small { font-size: 13px; padding: 2px 10px; text-transform: none; letter-spacing: 0; }
+.btn.right { float: right; margin-top: -3px; }
+.action { margin-top: 8px; font-size: 13px; color: var(--dim); }
+.action.failed { color: var(--red); }
+.action pre { font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; margin: 4px 0 0; white-space: pre-wrap; word-break: break-word; }
+[hidden] { display: none !important; }
+.signin { font-size: 13px; }
+.note { font-size: 13px; color: var(--dim); }
+dialog { border: 1px solid var(--line); border-radius: 14px; background: var(--card); color: var(--text); padding: 20px; width: min(360px, calc(100vw - 32px)); }
+dialog::backdrop { background: rgba(0, 0, 0, .4); }
+dialog h3 { margin: 0 0 12px; font-size: 17px; }
+dialog input[type=password] { width: 100%; font: inherit; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--text); }
+dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
+.error { color: var(--red); font-size: 13px; min-height: 1.4em; margin-top: 6px; }
+form.settings { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px 18px; margin-top: 6px; }
+form.settings label { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 14px; }
+form.settings select, form.settings input[type=number] { font: inherit; font-size: 14px; padding: 3px 6px; border-radius: 6px;
+  border: 1px solid var(--line); background: var(--bg); color: var(--text); width: 110px; }
+form.settings .hint { grid-column: 1 / -1; }
+form.settings .row { grid-column: 1 / -1; display: flex; gap: 8px; justify-content: flex-end; align-items: center; }
 </style>
 </head>
 <body>
 <main>
   <header>
-    <h1>Azeroth (bots)</h1>
-    <span class="status"><span class="dot" id="dot"></span><span id="state">Loading…</span></span>
-    <span class="updated" id="updated"></span>
+    <h1>Azeroth servers</h1>
+    <span class="servers" id="servers">
+      <button data-server="classic"><span class="dot" id="dot-classic"></span>Classic</button>
+      <button data-server="pandaria"><span class="dot" id="dot-pandaria"></span>Pandaria</button>
+    </span>
+    <span class="updated" id="updated">Loading…</span>
+    <button class="btn small signin" id="signin">Sign in</button>
   </header>
 
+  <dialog id="login">
+    <form method="dialog" id="login-form">
+      <h3>Sign in</h3>
+      <input type="password" id="password" autocomplete="current-password" placeholder="Dashboard password" required>
+      <div class="error" id="login-error"></div>
+      <div class="row"><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn primary" id="login-go" value="go">Sign in</button></div>
+    </form>
+  </dialog>
+
   <div class="grid">
+    <section class="card wide">
+      <div class="controls">
+        <span class="dot" id="dot"></span><span class="state" id="state">Loading…</span>
+        <span class="sub" id="state-sub"></span>
+        <span class="buttons" id="buttons">
+          <button class="btn primary" id="start" data-action="start">Start</button>
+          <button class="btn" id="restart" data-action="restart">Restart</button>
+          <button class="btn" id="stop" data-action="stop">Stop</button>
+        </span>
+        <span class="buttons note" id="locked" hidden></span>
+      </div>
+      <div class="action" id="action" hidden></div>
+    </section>
+
     <section class="card">
       <h2>Playing</h2>
       <div class="big" id="players-n">–</div>
@@ -112,10 +180,10 @@ code { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
       <div class="bars" id="levels"></div>
     </section>
 
-    <section class="card wide">
-      <h2>World map <span class="tabs" id="tabs"><button data-map="0">Eastern Kingdoms</button><button data-map="1">Kalimdor</button></span></h2>
+    <section class="card wide" id="map-card">
+      <h2>World map <span class="tabs" id="tabs"></span></h2>
       <div class="map"><img id="map-img" alt=""><svg id="map-dots" viewBox="0 0 1002 668"></svg>
-        <div class="missing" id="map-missing" hidden>The map pictures come from your game files: open Settings › Home Server in the launcher once to copy them here.</div></div>
+        <div class="missing" id="map-missing" hidden></div></div>
       <div class="sub" id="map-sub"></div>
     </section>
 
@@ -130,35 +198,57 @@ code { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
       <div class="sub" id="spark-cpu-sub"></div>
     </section>
 
-    <section class="card half">
-      <h2>Backups</h2>
+    <section class="card half" id="backups-card">
+      <h2>Backups <button class="btn small right" id="backup" data-action="backup" hidden>Back up now</button></h2>
       <table><tbody id="backups"></tbody></table>
     </section>
-    <section class="card half">
-      <h2>Settings &amp; software</h2>
+    <section class="card half" id="settings-card">
+      <h2>Settings &amp; software <button class="btn small right" id="edit" hidden>Change…</button></h2>
       <div id="settings"></div>
+      <form class="settings" id="settings-form" hidden></form>
       <div class="sub" id="software" style="margin-top:8px"></div>
     </section>
 
     <section class="card wide">
-      <h2>Latest server errors</h2>
+      <h2 id="errors-title">Latest server errors</h2>
       <pre class="errors" id="errors"></pre>
-      <div class="sub">The bots' harmless pathing, cooldown and spell messages are left out.</div>
+      <div class="sub" id="errors-sub"></div>
     </section>
   </div>
 </main>
 <script>
-const RACES = {1:"Human",2:"Orc",3:"Dwarf",4:"Night Elf",5:"Undead",6:"Tauren",7:"Gnome",8:"Troll"};
-const CLASSES = {1:"Warrior",2:"Paladin",3:"Hunter",4:"Rogue",5:"Priest",7:"Shaman",8:"Mage",9:"Warlock",11:"Druid"};
-const SETTINGS = {BOTS:"Bots", BOTS_NEAR_PLAYERS:"Bots come to players", BOTS_SYNC_LEVEL:"Bots near players' level",
-  RATE_XP:"Experience", RATE_LOOT:"Loot", RATE_GOLD:"Gold", RATE_REPUTATION:"Reputation", RATE_REST:"Rested",
-  AH_ENABLED:"Auction house bot", AH_PRICES:"Auction prices", AH_STOCK:"Auction stock"};
-// Each continent's world map, as WorldMapArea.dbc bounds it: the y at its left and right edges,
-// the x at its top and bottom (the world's x runs north, its y west).
-const MAPS = {0: {file: "azeroth.png", left: 16000, right: -19200, top: 7467, bottom: -16000},
-              1: {file: "kalimdor.png", left: 17067, right: -19733, top: 12800, bottom: -11733}};
-let shownMap = 0, last;
-try { shownMap = Number(localStorage.getItem("map")) === 1 ? 1 : 0; } catch (e) {}
+const RACES = {1:"Human",2:"Orc",3:"Dwarf",4:"Night Elf",5:"Undead",6:"Tauren",7:"Gnome",8:"Troll",9:"Goblin",
+  10:"Blood Elf",11:"Draenei",22:"Worgen",24:"Pandaren",25:"Pandaren",26:"Pandaren"};
+const CLASSES = {1:"Warrior",2:"Paladin",3:"Hunter",4:"Rogue",5:"Priest",6:"Death Knight",7:"Shaman",8:"Mage",
+  9:"Warlock",10:"Monk",11:"Druid"};
+const RATES = [0.5, 1, 1.5, 2, 3, 5];
+// Each setting the dashboard shows and changes: its name and its choices ("switch" for on and
+// off, "count" for a number of bots), per server as `home-status` and `dashboard.py` allow.
+const SETTINGS = {
+  BOTS: ["Bots", "count"],
+  BOTS_NEAR_PLAYERS: ["Bots come to players", "switch"],
+  BOTS_SYNC_LEVEL: ["Bots near players' level", "switch"],
+  MAP_THREADS: ["World threads", [1, 2, 3, 4, 6, 8]],
+  RATE_XP: ["Experience", RATES], RATE_LOOT: ["Loot", RATES], RATE_GOLD: ["Gold", RATES],
+  RATE_REPUTATION: ["Reputation", RATES], RATE_REST: ["Rested", RATES],
+  AH_ENABLED: ["Auction house bot", "switch"],
+  AH_PRICES: ["Auction prices", [0.2, 0.35, 0.5, 0.75, 1, 1.5]],
+  AH_STOCK: ["Auction stock", [0.25, 0.5, 1, 1.5, 2, 3]],
+};
+const NAMES = {classic: "Classic", pandaria: "Pandaria"};
+const STATES = {up: ["up", "Running"], starting: ["working", "Starting"], busy: ["working", "Setting up or updating"],
+                stopped: ["down", "Stopped"], missing: ["down", "Not set up"]};
+const DOING = {start: "Starting", stop: "Stopping", restart: "Restarting", backup: "Backing up", settings: "Applying the settings to"};
+const DONE = {start: "Started", stop: "Stopped", restart: "Restarted", backup: "Backed up", settings: "Applied the settings to"};
+// Each 1.12 continent's world map, as WorldMapArea.dbc bounds it: the y at its left and right
+// edges, the x at its top and bottom (the world's x runs north, its y west). Pandaria's come
+// with its status, read from its own client.
+const CLASSIC_MAPS = [{map: 0, name: "Eastern Kingdoms", file: "azeroth.png", left: 16000, right: -19200, top: 7467, bottom: -16000},
+                      {map: 1, name: "Kalimdor", file: "kalimdor.png", left: 17067, right: -19733, top: 12800, bottom: -11733}];
+let shown = null, last, hists = {}, asked = null, timer, session = {signedIn: false, passwordSet: false}, editing = false;
+let shownMaps = {classic: 0, pandaria: 870};
+try { shown = localStorage.getItem("server"); } catch (e) {}
+try { Object.assign(shownMaps, JSON.parse(localStorage.getItem("maps") || "{}")); } catch (e) {}
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const gb = b => (b / 1073741824).toFixed(1) + " GB";
@@ -170,12 +260,14 @@ const ago = t => {
   return Math.round(s / 86400) + " days ago";
 };
 
-function state(s) {
-  const v = s.services;
-  if (v.realmd === "healthy" && v.mangosd === "healthy") return ["up", "Running"];
-  if (v.mangosd === "starting" || v.realmd === "starting") return ["working", "Starting"];
-  if (v.mangosd === "missing") return ["down", "Not set up"];
-  return ["down", "Stopped"];
+// A status written before Pandaria joined: the Classic server's fields at the top level.
+function normalize(s) {
+  if (s.version >= 2) return s;
+  const v = s.services || {};
+  const state = v.realmd === "healthy" && v.mangosd === "healthy" ? "up"
+    : v.mangosd === "starting" || v.realmd === "starting" ? "starting" : v.mangosd === "missing" ? "missing" : "stopped";
+  return {updated: s.updated, address: s.address, machine: s.machine, action: null,
+          classic: Object.assign({}, s, {state}), pandaria: {state: "missing"}};
 }
 
 function spark(id, points, max) {
@@ -188,108 +280,312 @@ function spark(id, points, max) {
   svg.innerHTML = `<path class="area" d="${line}L100,40L0,40Z"/><path class="line" d="${line}"/>`;
 }
 
-function drawMap(s) {
-  const m = MAPS[shownMap];
-  document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("on", Number(b.dataset.map) === shownMap));
+const missingMaps = () => shown === "classic"
+  ? "The map pictures come from your game files: open Settings › Home Server in the launcher once to copy them here."
+  : "The map pictures are drawn from the game files on the server, a minute after the launcher next connects.";
+
+function drawMap(g) {
+  const maps = shown === "classic" ? CLASSIC_MAPS : (g.maps || []).map(m => Object.assign({}, m, {file: "pandaria/" + m.file}));
+  const tabs = $("tabs");
+  if (!maps.length) {
+    tabs.innerHTML = "";
+    $("map-img").hidden = true;
+    $("map-missing").hidden = false;
+    $("map-missing").textContent = missingMaps();
+    $("map-dots").innerHTML = $("map-sub").textContent = "";
+    return;
+  }
+  const m = maps.find(m => m.map === shownMaps[shown]) || maps[0];
+  const key = maps.map(m => m.map).join();
+  if (tabs.dataset.key !== key) {
+    tabs.dataset.key = key;
+    tabs.innerHTML = maps.map(m => `<button data-map="${m.map}">${esc(m.name)}</button>`).join("");
+    tabs.querySelectorAll("button").forEach(b => b.addEventListener("click", () => {
+      shownMaps[shown] = Number(b.dataset.map);
+      try { localStorage.setItem("maps", JSON.stringify(shownMaps)); } catch (e) {}
+      drawMap(last[shown]);
+    }));
+  }
+  tabs.querySelectorAll("button").forEach(b => b.classList.toggle("on", Number(b.dataset.map) === m.map));
   const img = $("map-img");
-  if (!img.src.endsWith(m.file)) {
+  if (img.getAttribute("src") !== m.file) {
     $("map-missing").hidden = true;
     img.hidden = false;
     img.src = m.file;
   }
-  if (!s) return;
   const at = (x, y) => [((m.left - y) / (m.left - m.right) * 1002).toFixed(1), ((m.top - x) / (m.top - m.bottom) * 668).toFixed(1)];
-  const bots = (s.botPositions || []).filter(b => b[0] === shownMap);
-  const players = s.players.filter(p => p.map === shownMap);
+  const bots = (g.botPositions || []).filter(b => b[0] === m.map);
+  const players = (g.players || []).filter(p => p.map === m.map);
   $("map-dots").innerHTML =
     bots.map(b => { const [x, y] = at(b[1], b[2]); return `<circle class="bot" cx="${x}" cy="${y}" r="3.5"><title>Bot, level ${b[3]}</title></circle>`; }).join("") +
     players.map(p => { const [x, y] = at(p.x, p.y);
       return `<circle class="player" cx="${x}" cy="${y}" r="6"><title>${esc(p.name)}, level ${p.level}</title></circle><text x="${Number(x) + 9}" y="${Number(y) + 4}">${esc(p.name)}</text>`; }).join("");
-  const elsewhere = s.players.length - s.players.filter(p => p.map === 0 || p.map === 1).length;
+  const elsewhere = (g.players || []).filter(p => !maps.some(m => m.map === p.map)).length;
   $("map-sub").textContent = `${bots.length} bots and ${players.length} ${players.length === 1 ? "player" : "players"} here` +
-    (elsewhere ? ` · ${elsewhere} in a dungeon or battleground` : "") + ". Positions are as last saved, every few minutes.";
+    (elsewhere ? ` · ${elsewhere} in a dungeon, battleground or elsewhere` : "") + ". Positions are as last saved, every few minutes.";
 }
 
-async function load() {
-  let s, hist = [];
-  try {
-    s = await (await fetch("status.json?t=" + Date.now(), {cache: "no-store"})).json();
-  } catch (e) {
-    $("state").textContent = "Can't read the server's status";
-    $("dot").className = "dot down";
-    return;
+// The running action, or the one just asked for and not yet picked up.
+function pending(s) {
+  const a = s.action;
+  if (a && a.state === "running") return a;
+  if (asked && Date.now() - asked.at < 90000 && !(a && a.started * 1000 >= asked.at - 5000)) return asked;
+  return null;
+}
+
+function drawAction(s) {
+  const el = $("action"), a = s.action, p = pending(s);
+  el.className = "action";
+  if (p) {
+    el.hidden = false;
+    el.textContent = `${DOING[p.action]} ${NAMES[p.server]}…` + (p.state === "running" ? "" : " (the server picks it up within a few seconds)");
+  } else if (a && a.finished && Date.now() / 1000 - a.finished < 600) {
+    el.hidden = false;
+    if (a.state === "failed") el.className = "action failed";
+    el.innerHTML = (a.state === "failed" ? `Couldn't ${esc(a.action === "settings" ? "apply the settings to" : a.action)} ${NAMES[a.server]}`
+                                         : `${DONE[a.action]} ${NAMES[a.server]}`) +
+      ` ${ago(a.finished)}.` + (a.state === "failed" && a.output.length ? `<pre>${a.output.map(esc).join("\n")}</pre>` : "");
+  } else {
+    el.hidden = true;
   }
-  try {
-    const text = await (await fetch("history.tsv?t=" + Date.now(), {cache: "no-store"})).text();
-    hist = text.trim().split("\n").map(l => l.split("\t").map(Number)).filter(r => r.length >= 5);
-  } catch (e) {}
+}
 
-  const [cls, label] = state(s);
+function settingValue(k, v) {
+  const kind = SETTINGS[k][1];
+  if (kind === "switch") return v === "1" ? "on" : "off";
+  if (k.startsWith("RATE_") || k === "AH_PRICES" || k === "AH_STOCK") return "×" + v;
+  return v;
+}
+
+function drawSettings(g) {
+  const settings = g.settings || {};
+  $("settings").innerHTML = Object.entries(SETTINGS).filter(([k]) => settings[k] !== undefined && settings[k] !== "")
+    .map(([k, [name]]) => `<span class="pill">${name}: ${esc(settingValue(k, settings[k]))}</span>`).join("") +
+    (g.auctions ? `<div class="sub" style="margin-top:6px">${g.auctions.toLocaleString()} auctions on sale</div>` : "");
+  $("edit").hidden = !session.signedIn || editing || g.state === "missing" || g.state === "busy";
+  $("settings").hidden = editing;
+  $("settings-form").hidden = !editing;
+}
+
+function openEditor() {
+  const g = last[shown], settings = g.settings || {}, running = g.state === "up" || g.state === "starting";
+  const field = ([k, [name, kind]]) => {
+    const v = settings[k];
+    if (kind === "switch") return `<label>${name}<input type="checkbox" name="${k}" ${v === "1" ? "checked" : ""}></label>`;
+    if (kind === "count") return `<label>${name}<input type="number" name="${k}" min="0" max="2000" step="50" value="${esc(v)}" required></label>`;
+    const choices = kind.map(String).includes(v) ? kind.map(String) : [v, ...kind.map(String)];
+    return `<label>${name}<select name="${k}">${choices.map(c => `<option ${c === v ? "selected" : ""}>${esc(c)}</option>`).join("")}</select></label>`;
+  };
+  const form = $("settings-form");
+  form.innerHTML = Object.entries(SETTINGS).filter(([k]) => settings[k] !== undefined && settings[k] !== "").map(field).join("") +
+    (shown === "pandaria" ? `<div class="hint note">World threads: how many cores update the continents at once. More helps when bots spread over several continents.</div>` : "") +
+    `<div class="row"><span class="note">${running ? "Saving restarts the server: anyone playing is disconnected for a few minutes." : "Saved for the next start."}</span>
+       <button class="btn" type="button" id="edit-cancel">Cancel</button><button class="btn primary">${running ? "Save &amp; restart" : "Save"}</button></div>`;
+  $("edit-cancel").addEventListener("click", () => { editing = false; draw(); });
+  editing = true;
+  draw();
+}
+
+$("settings-form").addEventListener("submit", async e => {
+  e.preventDefault();
+  const g = last[shown], values = {};
+  for (const el of e.target.elements) {
+    if (!el.name) continue;
+    const v = el.type === "checkbox" ? (el.checked ? "1" : "0") : el.value;
+    if (v !== g.settings[el.name]) values[el.name] = v;
+  }
+  editing = false;
+  if (Object.keys(values).length) await post("settings", {server: shown, values}, {server: shown, action: "settings"});
+  draw();
+});
+
+function draw() {
+  const s = last;
+  if (!s) return;
+  const g = s[shown] || {state: "missing"};
+  document.querySelectorAll("#servers button").forEach(b => {
+    b.classList.toggle("on", b.dataset.server === shown);
+    b.hidden = s[b.dataset.server].state === "missing" && b.dataset.server !== shown;
+  });
+  for (const k of ["classic", "pandaria"]) $("dot-" + k).className = "dot " + STATES[s[k].state][0];
+  $("signin").textContent = session.signedIn ? "Sign out" : "Sign in";
+
+  const [cls, label] = STATES[g.state];
   $("dot").className = "dot " + cls;
-  $("state").textContent = label + (s.address ? " at " + s.address : "");
-  const age = Date.now() / 1000 - s.updated;
-  $("updated").innerHTML = age > 180 ? `<span class="stale">Not updated for ${Math.round(age / 60)} minutes</span>`
-                                     : "Updated " + new Date(s.updated * 1000).toLocaleTimeString();
-  document.title = `Azeroth Server · ${label}`;
+  $("state").textContent = `${NAMES[shown]}: ${label}`;
+  $("state-sub").textContent = (g.state === "up" && s.address ? `at ${s.address}` : "") +
+    (g.since && (g.state === "up" || g.state === "starting") ? ` · since ${new Date(g.since).toLocaleString()}` : "");
+  document.title = `Azeroth servers · ${NAMES[shown]} ${label.toLowerCase()}`;
 
-  $("players-n").textContent = s.players.length;
-  $("players-sub").textContent = s.players.length ? s.players.map(p => p.name).join(", ") : "Nobody right now";
-  $("bots-n").textContent = s.bots;
-  $("bots-sub").textContent = s.settings.BOTS ? `of ${s.settings.BOTS} set` : "";
-  $("cpu").textContent = (s.game.cpu / 100).toFixed(1) + " cores";
-  $("cpu-sub").textContent = `of ${s.machine.cores} · machine load ${s.machine.load}` +
-    (s.since && cls !== "down" ? ` · up since ${new Date(s.since).toLocaleString()}` : "");
+  const busy = !!pending(s), on = g.state === "up" || g.state === "starting";
+  $("buttons").hidden = !session.signedIn;
+  $("locked").hidden = session.signedIn;
+  $("locked").textContent = session.passwordSet ? "Sign in to start, stop or change the servers."
+                                                : "Set a dashboard password in the launcher, Settings › Home Server, to start, stop or change the servers here.";
+  $("start").disabled = busy || g.state !== "stopped";
+  $("stop").disabled = busy || !on;
+  $("restart").disabled = busy || !on;
+  $("backup").hidden = !session.signedIn;
+  $("backup").disabled = busy || s.classic.state === "missing";
+  drawAction(s);
+
+  const players = g.players || [];
+  $("players-n").textContent = players.length;
+  $("players-sub").textContent = players.length ? players.map(p => p.name).join(", ") : on ? "Nobody right now" : "";
+  $("bots-n").textContent = g.bots || 0;
+  $("bots-sub").textContent = g.settings && g.settings.BOTS ? `of ${g.settings.BOTS} set` : "";
+  const game = g.game || {cpu: 0, memory: 0};
+  $("cpu").textContent = (game.cpu / 100).toFixed(1) + " cores";
+  $("cpu-sub").textContent = `of ${s.machine.cores} · machine load ${s.machine.load}`;
   const used = s.machine.memory - s.machine.available;
   $("mem").textContent = gb(s.machine.available) + " free";
   $("mem-bar").style.width = (used / s.machine.memory * 100).toFixed(1) + "%";
-  $("mem-sub").textContent = `of ${gb(s.machine.memory)} · game server ${gb(s.game.memory)}, database ${gb(s.databaseMemory)}`;
+  $("mem-sub").textContent = `of ${gb(s.machine.memory)} · game server ${gb(game.memory)}, database ${gb(g.databaseMemory || 0)}`;
 
-  $("players").innerHTML = s.players.length ? s.players.map(p =>
+  $("players").innerHTML = players.length ? players.map(p =>
     `<tr><td>${esc(p.name)}</td><td>${RACES[p.race] || p.race}</td><td>${CLASSES[p.class] || p.class}</td><td class="num">${p.level}</td></tr>`).join("")
     : `<tr><td colspan="4" class="empty">Nobody is playing.</td></tr>`;
 
-  const maxLevel = Math.max(1, ...s.botLevels.map(b => b.count));
-  $("levels").innerHTML = s.botLevels.length ? s.botLevels.map(b =>
+  const levels = g.botLevels || [];
+  const maxLevel = Math.max(1, ...levels.map(b => b.count));
+  $("levels").innerHTML = levels.length ? levels.map(b =>
     `<div><span class="v">${b.count}</span><span class="b" style="height:${b.count / maxLevel * 70}%"></span><span class="l">${b.from}–${b.from + 9}</span></div>`).join("")
     : `<span class="empty">No bots online.</span>`;
 
+  const hist = hists[shown] || [];
   spark("spark-bots", hist.map(r => [r[0], r[2]]));
   spark("spark-cpu", hist.map(r => [r[0], r[3]]), 100);
+  $("spark-bots-sub").textContent = $("spark-cpu-sub").textContent = "";
   if (hist.length) {
     const bots = hist.map(r => r[2]), cpu = hist.map(r => r[3]);
     $("spark-bots-sub").textContent = `${Math.min(...bots)}–${Math.max(...bots)} bots · ${Math.max(...hist.map(r => r[1]))} players at most`;
     $("spark-cpu-sub").textContent = `average ${(cpu.reduce((a, b) => a + b, 0) / cpu.length / 100).toFixed(1)} cores, peak ${(Math.max(...cpu) / 100).toFixed(1)}`;
   }
 
-  $("backups").innerHTML = s.backups.length ? s.backups.map(b =>
-    `<tr><td>${new Date(b.time * 1000).toLocaleString()}${b.name.includes("before-restore") ? ' <span class="pill">before a restore</span>' : ""}</td><td class="num sub">${(b.bytes / 1048576).toFixed(1)} MB</td></tr>`).join("")
-    : `<tr><td class="empty">No backups yet.</td></tr>`;
+  drawMap(g);
+  // The backups are the Classic server's.
+  $("backups-card").hidden = shown !== "classic";
+  if (shown === "classic") {
+    $("backups").innerHTML = (g.backups || []).length ? g.backups.map(b =>
+      `<tr><td>${new Date(b.time * 1000).toLocaleString()}${b.name.includes("before-restore") ? ' <span class="pill">before a restore</span>' : ""}</td><td class="num sub">${(b.bytes / 1048576).toFixed(1)} MB</td></tr>`).join("")
+      : `<tr><td class="empty">No backups yet.</td></tr>`;
+  }
+  $("settings-card").classList.toggle("wide", shown !== "classic" || editing);
+  $("settings-card").classList.toggle("half", shown === "classic" && !editing);
+  drawSettings(g);
 
-  $("settings").innerHTML = Object.entries(SETTINGS).filter(([k]) => s.settings[k] !== undefined).map(([k, name]) => {
-    let v = s.settings[k];
-    if (k.startsWith("RATE_") || k === "AH_PRICES" || k === "AH_STOCK") v = "×" + v;
-    else if (k !== "BOTS") v = v === "1" ? "on" : "off";
-    return `<span class="pill">${name}: ${esc(v)}</span>`;
-  }).join("") + (s.auctions ? `<div class="sub" style="margin-top:6px">${s.auctions.toLocaleString()} auctions on sale</div>` : "");
-  const sw = s.software;
-  $("software").innerHTML = `CMaNGOS <code>${esc((sw.CMANGOS_REF || "").slice(0, 7))}</code> · playerbots <code>${esc((sw.PLAYERBOTS_REF || "").slice(0, 7))}</code> · classic-db <code>${esc((sw.CLASSICDB_REF || "").slice(0, 7))}</code>` +
-    (s.updated_software ? ` · updated ${new Date(s.updated_software).toLocaleDateString()}` : "");
+  const sw = g.software || {}, ref = k => `<code>${esc((sw[k] || "").slice(0, 7))}</code>`;
+  $("software").innerHTML = shown === "classic"
+    ? `CMaNGOS ${ref("CMANGOS_REF")} · playerbots ${ref("PLAYERBOTS_REF")} · classic-db ${ref("CLASSICDB_REF")}` +
+      (g.updated_software ? ` · updated ${new Date(g.updated_software).toLocaleDateString()}` : "")
+    : `Mists of Pandaria 5.4.8 · LoA-Pandaria-Playerbots ${ref("PANDARIA_REF")}`;
 
-  last = s;
-  drawMap(s);
-
-  $("errors").innerHTML = s.errors.length ? s.errors.map(esc).join("\n") : `<span class="ok">No errors lately.</span>`;
+  const errors = g.errors || [];
+  $("errors").classList.toggle("log", shown !== "classic");
+  $("errors-title").textContent = shown === "classic" ? "Latest server errors" : "Latest server log";
+  $("errors").innerHTML = errors.length ? errors.map(esc).join("\n") : `<span class="ok">${shown === "classic" ? "No errors lately." : "Nothing logged lately."}</span>`;
+  $("errors-sub").textContent = "The bots' harmless " + (shown === "classic" ? "pathing, cooldown and spell" : "combat") + " messages are left out.";
 }
 
-$("map-img").addEventListener("error", () => { $("map-img").hidden = true; $("map-missing").hidden = false; });
-document.querySelectorAll("#tabs button").forEach(b => b.addEventListener("click", () => {
-  shownMap = Number(b.dataset.map);
-  try { localStorage.setItem("map", shownMap); } catch (e) {}
-  drawMap(last);
+async function load() {
+  let s;
+  try {
+    s = normalize(await (await fetch("status.json?t=" + Date.now(), {cache: "no-store"})).json());
+  } catch (e) {
+    $("state").textContent = "Can't read the servers' status";
+    $("dot").className = "dot down";
+    return schedule();
+  }
+  try { session = await (await fetch("session", {cache: "no-store"})).json(); } catch (e) {}
+  for (const [k, file] of [["classic", "history.tsv"], ["pandaria", "history-pandaria.tsv"]]) {
+    try {
+      const text = s[k].state === "missing" ? "" : await (await fetch(file + "?t=" + Date.now(), {cache: "no-store"})).text();
+      hists[k] = text.trim().split("\n").map(l => l.split("\t").map(Number)).filter(r => r.length >= 5);
+    } catch (e) { hists[k] = []; }
+  }
+  // At first the server that runs, else Classic, unless one was chosen before.
+  if (!shown || !s[shown] || (s[shown].state === "missing" && !last))
+    shown = s.pandaria.state !== "missing" && s.pandaria.state !== "stopped" && s.classic.state !== "up" ? "pandaria" : "classic";
+  const age = Date.now() / 1000 - s.updated;
+  $("updated").innerHTML = age > 180 ? `<span class="stale">Not updated for ${Math.round(age / 60)} minutes</span>`
+                                     : "Updated " + new Date(s.updated * 1000).toLocaleTimeString();
+  last = s;
+  draw();
+  schedule();
+}
+
+// Every 30 seconds; every 3 while something is being done.
+function schedule() {
+  clearTimeout(timer);
+  const g = last && last[shown];
+  timer = setTimeout(load, last && (pending(last) || (g && g.state === "starting")) ? 3000 : 30000);
+}
+
+async function post(path, body, pendingAs) {
+  try {
+    const r = await fetch(path, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
+    if (r.status === 401) { session.signedIn = false; $("login").showModal(); return; }
+    if (!r.ok) throw new Error(r.status);
+    asked = Object.assign({at: Date.now()}, pendingAs);
+  } catch (e) {
+    alert("The dashboard couldn't pass that on to the server.");
+  }
+  draw();
+  schedule();
+}
+
+async function ask(action) {
+  const server = action === "backup" ? "classic" : shown, s = last;
+  const other = server === "classic" ? "pandaria" : "classic";
+  const questions = {
+    stop: `Stop ${NAMES[server]}? Anyone playing is disconnected.`,
+    restart: `Restart ${NAMES[server]}? Anyone playing is disconnected for a few minutes.`,
+    start: s[other].state === "up" || s[other].state === "starting"
+      ? `Start ${NAMES[server]}? ${NAMES[other]} stops first: the two servers share their ports.` : null,
+  };
+  if (questions[action] && !confirm(questions[action])) return;
+  await post("action", {server, action}, {server, action});
+}
+
+$("signin").addEventListener("click", async () => {
+  if (session.signedIn) {
+    await fetch("logout", {method: "POST", headers: {"Content-Type": "application/json"}, body: "{}"});
+    session.signedIn = editing = false;
+    return draw();
+  }
+  $("login-error").textContent = session.passwordSet ? "" : "No password is set yet: set one in the launcher, Settings › Home Server.";
+  $("password").value = "";
+  $("login").showModal();
+});
+$("login-form").addEventListener("submit", async e => {
+  if (e.submitter && e.submitter.value === "cancel") return;
+  e.preventDefault();
+  $("login-go").disabled = true;
+  try {
+    const r = await fetch("login", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({password: $("password").value})});
+    if (r.ok) {
+      session.signedIn = true;
+      $("login").close();
+      draw();
+    } else {
+      $("login-error").textContent = r.status === 403 && session.passwordSet ? "That's not the password." : "No password is set yet: set one in the launcher, Settings › Home Server.";
+    }
+  } catch (e) {
+    $("login-error").textContent = "The dashboard didn't answer.";
+  }
+  $("login-go").disabled = false;
+});
+
+$("map-img").addEventListener("error", () => { $("map-img").hidden = true; $("map-missing").hidden = false; $("map-missing").textContent = missingMaps(); });
+document.querySelectorAll("#servers button").forEach(b => b.addEventListener("click", () => {
+  shown = b.dataset.server;
+  editing = false;
+  try { localStorage.setItem("server", shown); } catch (e) {}
+  draw();
 }));
-drawMap();
+document.querySelectorAll("[data-action]").forEach(b => b.addEventListener("click", () => ask(b.dataset.action)));
+$("edit").addEventListener("click", openEditor);
 load();
-setInterval(load, 30000);
 </script>
 </body>
 </html>

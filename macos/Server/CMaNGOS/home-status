@@ -1,51 +1,107 @@
 #!/bin/bash
-# The home server's dashboard: every minute cron writes what the server is doing into
-# `storage/dashboard/` (`status.json`, a day of `history.tsv`), which the `dashboard` container
-# (`compose.lan.yaml`) serves with `dashboard.html` on the LAN address, port 8095. The page reads
-# only these files: the container gets no Docker socket and no database password.
+# The home server's dashboard, for this folder's Classic server and the Pandaria one beside it
+# (`../azeroth-survivors-pandaria`). Every minute cron runs `tick`: it writes what the servers are
+# doing into `storage/dashboard/` (`status.json`, a day of `history.tsv` and `history-pandaria.tsv`),
+# then for the rest of the minute carries out what the dashboard's buttons ask. The `dashboard`
+# container (`compose.lan.yaml`, `dashboard.py`) serves those files with `dashboard.html` on the LAN
+# address, port 8095, and leaves each request of someone signed in in `storage/dashboard-requests/`,
+# a file named for a server and an action (a settings request holds `KEY=value` lines). It gets
+# no Docker socket and no database password.
 #
-#   home-status now        write the status
-#   home-status schedule   run `now` every minute and keep the dashboard container up
+#   home-status now                    write the status
+#   home-status tick                   `now`, then a minute of the dashboard's requests (cron's)
+#   home-status act <server> <action>  classic|pandaria start|stop|restart|settings, classic backup
+#   home-status password               the dashboard's password, from standard input
+#   home-status schedule               run `tick` every minute and keep the dashboard container up
 set -euo pipefail
 cd "$(dirname "$0")"
 p=azeroth-survivors-cmangos
+pp=azeroth-survivors-pandaria
+pd=../$pp
 out=storage/dashboard
-mkdir -p "$out"
+requests=storage/dashboard-requests
+mkdir -p "$out" "$requests" storage/dashboard-auth
 
 # A JSON string from anything: backslashes, quotes and control characters escaped.
 js() { printf '"%s"' "$(printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' | tr -d '\000-\037')"; }
 
-health() { docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$p-$1-1" 2>/dev/null || echo missing; }
+health() { docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$1" 2>/dev/null || echo missing; }
 
 sql() { docker exec "$p-database-1" mariadb -umangos -pmangos -N -B -e "$1" 2>/dev/null; }
+psql() { docker exec "$pp-database-1" mysql -uroot -ppassword -N -B -e "$1" 2>/dev/null; }
 
-# Lines CMaNGOS logs as errors about its bots that are no problem (as the launcher's Logs window).
+# A setup or an update still running in a server's folder.
+busy() { local f; for f in "$1"/.setup-pid "$1"/.update-pid; do [ -f "$f" ] && kill -0 "$(cat "$f")" 2>/dev/null && return 0; done; return 1; }
+
+# Lines the servers log as errors about their bots that are no problem (as the launcher's Logs window).
 noise='AbstractPathMovementGenerator::Initialize Path empty|is not moving but have spline movement enabled|try to add and already existing cooldown|CastSpell: unknown spell id 0 |Cannot teleport bot .* - no locations available'
+pnoise='EngagementStart called even though creature is already engaged'
 
-now() {
-    local realmd mangosd database since cpu=0 mem=0 dbmem=0 players="" bots=0 brackets="" errors="" backups="" auctions=0 dots="" nplayers=0
-    realmd=$(health realmd) mangosd=$(health mangosd) database=$(health database)
-    since=$(docker inspect -f '{{.State.StartedAt}}' "$p-mangosd-1" 2>/dev/null || true)
+# The game servers' and databases' CPU (% of a core) and memory (bytes), by container.
+declare -A cpu mem
+stats() {
+    local names name c m
+    names=$(docker ps --format '{{.Names}}' | grep -E "^($p-(mangosd|database)|$pp-(worldserver|database))-1$" || true)
+    [ -n "$names" ] || return 0
     # `49.15%|5.419GiB / 22.92GiB`, in bytes.
     while IFS='|' read -r name c m; do
-        m=$(numfmt --from=iec-i --suffix=B "${m%% /*}" 2>/dev/null | tr -d B || echo 0)
-        case $name in
-        *mangosd*) cpu=${c%\%} mem=${m:-0} ;;
-        *database*) dbmem=${m:-0} ;;
-        esac
-    done < <(docker stats --no-stream --format '{{.Name}}|{{.CPUPerc}}|{{.MemUsage}}' "$p-mangosd-1" "$p-database-1" 2>/dev/null || true)
+        cpu[$name]=${c%\%}
+        mem[$name]=$(numfmt --from=iec-i --suffix=B "${m%% /*}" 2>/dev/null | tr -d B || echo 0)
+    done < <(docker stats --no-stream --format '{{.Name}}|{{.CPUPerc}}|{{.MemUsage}}' $names 2>/dev/null || true)
+}
+
+# Bots online by ten levels, as `[{"from":1,"count":12},…]` from `from <tab> count` lines.
+brackets() {
+    local list="" from n
+    while IFS=$'\t' read -r from n; do
+        [ -n "$from" ] || continue
+        list+="${list:+,}{\"from\":$from,\"count\":$n}"
+    done
+    printf '[%s]' "$list"
+}
+
+# Players online, from `name <tab> level <tab> race <tab> class <tab> map <tab> x <tab> y` lines.
+players() {
+    local list="" name level race class map x y
+    while IFS=$'\t' read -r name level race class map x y; do
+        [ -n "$name" ] || continue
+        list+="${list:+,}{\"name\":$(js "$name"),\"level\":$level,\"race\":$race,\"class\":$class,\"map\":$map,\"x\":${x:-0},\"y\":${y:-0}}"
+    done
+    printf '[%s]' "$list"
+}
+
+# The last lines of a log, as a JSON array.
+lines() {
+    local list="" line
+    while IFS= read -r line; do list+="${list:+,}$(js "$line")"; done
+    printf '[%s]' "$list"
+}
+
+# A day of minutes in a history file: time, players, bots, game server CPU, its memory. One row
+# a minute, however often the status is written.
+history() {
+    local last
+    last=$(tail -n 1 "$out/$1" 2>/dev/null | cut -f1)
+    (($(date +%s) - ${last:-0} >= 50)) || return 0
+    printf '%s\t%s\t%s\t%s\t%s\n' "$(date +%s)" "$2" "$3" "$4" "$5" >>"$out/$1"
+    tail -n 1440 "$out/$1" >"$out/$1.part" && mv "$out/$1.part" "$out/$1"
+}
+
+classic() {
+    local realmd mangosd database state since players="[]" bots=0 nplayers=0 levels="[]" dots="" auctions=0
+    realmd=$(health $p-realmd-1) mangosd=$(health $p-mangosd-1) database=$(health $p-database-1)
+    if [ "$realmd" = healthy ] && [ "$mangosd" = healthy ]; then state=up
+    elif [ "$mangosd" = starting ] || [ "$realmd" = starting ]; then state=starting
+    elif [ "$mangosd" = missing ]; then state=missing
+    else state=stopped; fi
+    ! busy . || state=busy
+    since=$(docker inspect -f '{{.State.StartedAt}}' "$p-mangosd-1" 2>/dev/null || true)
 
     if [ "$database" = healthy ]; then
-        while IFS=$'\t' read -r name level race class map x y; do
-            [ -n "$name" ] || continue
-            nplayers=$((nplayers + 1))
-            players+="${players:+,}{\"name\":$(js "$name"),\"level\":$level,\"race\":$race,\"class\":$class,\"map\":$map,\"x\":$x,\"y\":$y}"
-        done < <(sql "SELECT c.name, c.level, c.race, c.class, c.map, ROUND(c.position_x), ROUND(c.position_y) FROM classiccharacters.characters c JOIN classicrealmd.account a ON a.id = c.account WHERE c.online = 1 AND a.username NOT LIKE 'RNDBOT%' ORDER BY c.level DESC, c.name")
-        while IFS=$'\t' read -r bracket n; do
-            [ -n "$bracket" ] || continue
-            brackets+="${brackets:+,}{\"from\":$bracket,\"count\":$n}"
-            bots=$((bots + n))
-        done < <(sql "SELECT FLOOR((c.level - 1) / 10) * 10 + 1, COUNT(*) FROM classiccharacters.characters c JOIN classicrealmd.account a ON a.id = c.account WHERE c.online = 1 AND a.username LIKE 'RNDBOT%' GROUP BY 1 ORDER BY 1")
+        players=$(sql "SELECT c.name, c.level, c.race, c.class, c.map, ROUND(c.position_x), ROUND(c.position_y) FROM classiccharacters.characters c JOIN classicrealmd.account a ON a.id = c.account WHERE c.online = 1 AND a.username NOT LIKE 'RNDBOT%' ORDER BY c.level DESC, c.name" | players)
+        nplayers=$(grep -o '"name":' <<<"$players" | wc -l || true)
+        levels=$(sql "SELECT FLOOR((c.level - 1) / 10) * 10 + 1, COUNT(*) FROM classiccharacters.characters c JOIN classicrealmd.account a ON a.id = c.account WHERE c.online = 1 AND a.username LIKE 'RNDBOT%' GROUP BY 1 ORDER BY 1" | brackets)
+        bots=$(grep -o '"count":[0-9]*' <<<"$levels" | awk -F: '{s += $2} END {print s + 0}')
         # Where the bots are, for the dashboard's map: [map, x, y, level] each, on the two continents.
         while IFS=$'\t' read -r map x y level; do
             [ -n "$map" ] || continue
@@ -54,61 +110,239 @@ now() {
         auctions=$(sql "SELECT COUNT(*) FROM classiccharacters.auction" || echo 0)
     fi
 
-    local log=storage/mangosd/logs/Server.log
-    if [ -f $log ]; then
-        while IFS= read -r line; do
-            errors+="${errors:+,}$(js "$line")"
-        done < <(tail -n 5000 $log | grep ' ERROR:' | grep -Ev "$noise" | tail -n 8 || true)
-    fi
+    local errors="[]" log=storage/mangosd/logs/Server.log
+    [ ! -f $log ] || errors=$(tail -n 5000 $log | grep ' ERROR:' | grep -Ev "$noise" | tail -n 8 | lines || true)
 
+    local backups="" name bytes epoch
     while read -r name bytes epoch; do
         [ -n "$name" ] || continue
         backups+="${backups:+,}{\"name\":$(js "$name"),\"bytes\":$bytes,\"time\":$epoch}"
     done < <(./home-backup list 2>/dev/null | head -n 5 || true)
 
-    local refs="" key value
+    local refs="" settings="" key value updated
     for key in CMANGOS_REF PLAYERBOTS_REF CLASSICDB_REF; do
         value=$(sed -n "s/^$key=//p" .refs 2>/dev/null || true)
         [ -n "$value" ] || value=$(sed -n "s/^ARG $key=//p" Dockerfile 2>/dev/null || true)
         refs+="${refs:+,}$(js "$key"):$(js "$value")"
     done
-    local updated settings=""
     updated=$(sed -n 's/^UPDATED=//p' .refs 2>/dev/null || true)
     for key in BOTS BOTS_NEAR_PLAYERS BOTS_SYNC_LEVEL RATE_XP RATE_LOOT RATE_GOLD RATE_REPUTATION RATE_REST AH_ENABLED AH_PRICES AH_STOCK; do
         value=$(sed -n "s/^$key=//p" .env 2>/dev/null || true)
         [ -z "$value" ] || settings+="${settings:+,}$(js "$key"):$(js "$value")"
     done
 
-    local total available cores load
-    read -r total available < <(free -b | awk '/^Mem:/ {print $2, $7}')
-    cores=$(nproc)
-    load=$(cut -d' ' -f1 /proc/loadavg)
-
-    cat >"$out/status.json.part" <<EOF
-{"updated":$(date +%s),"address":$(js "$(sed -n 's/^LAN_IP=//p' .env 2>/dev/null || true)"),
-"services":{"realmd":$(js "$realmd"),"mangosd":$(js "$mangosd"),"database":$(js "$database")},
-"since":$(js "$since"),
-"players":[${players}],"bots":$bots,"botLevels":[${brackets}],"botPositions":[${dots}],"auctions":${auctions:-0},
-"machine":{"cores":$cores,"load":$load,"memory":$total,"available":$available},
-"game":{"cpu":$cpu,"memory":$mem},"databaseMemory":$dbmem,
+    local c=${cpu[$p-mangosd-1]:-0} m=${mem[$p-mangosd-1]:-0}
+    [ "$state" = missing ] || history history.tsv "$nplayers" "$bots" "$c" "$m"
+    cat <<EOF
+{"state":"$state","services":{"realmd":$(js "$realmd"),"mangosd":$(js "$mangosd"),"database":$(js "$database")},
+"since":$(js "$since"),"players":$players,"bots":$bots,"botLevels":$levels,"botPositions":[${dots}],"auctions":${auctions:-0},
+"game":{"cpu":$c,"memory":$m},"databaseMemory":${mem[$p-database-1]:-0},
 "backups":[${backups}],"software":{${refs}},"updated_software":$(js "$updated"),
-"settings":{${settings}},"errors":[${errors}]}
+"settings":{${settings}},"errors":$errors}
 EOF
-    mv "$out/status.json.part" "$out/status.json"
+}
 
-    # A day of minutes: time, players, bots, game server CPU (% of a core), its memory (bytes).
-    printf '%s\t%s\t%s\t%s\t%s\n' "$(date +%s)" "$nplayers" "$bots" "$cpu" "$mem" >>"$out/history.tsv"
-    tail -n 1440 "$out/history.tsv" >"$out/history.tsv.part" && mv "$out/history.tsv.part" "$out/history.tsv"
+pandaria() {
+    if [ ! -x $pd/home-compose ] || ! docker inspect $pp-worldserver-1 >/dev/null 2>&1; then
+        echo '{"state":"missing"}'
+        return
+    fi
+    local auth world database state since ip port players="[]" bots=0 nplayers=0 levels="[]" dots=""
+    auth=$(health $pp-authserver-1) world=$(health $pp-worldserver-1) database=$(health $pp-database-1)
+    ip=$(sed -n 's/^LAN_IP=//p' $pd/.env 2>/dev/null || true)
+    port=$(sed -n 's/^WORLD_PORT=//p' $pd/.env 2>/dev/null || true)
+    # Up once the world takes connections: loading it and logging the bots in takes minutes.
+    if [ "$world" != running ]; then state=stopped
+    elif [ -n "$ip" ] && timeout 2 bash -c "</dev/tcp/$ip/${port:-8085}" 2>/dev/null; then state=up
+    else state=starting; fi
+    ! busy $pd || state=busy
+    since=$(docker inspect -f '{{.State.StartedAt}}' "$pp-worldserver-1" 2>/dev/null || true)
+
+    # Characters stay marked online after a stop: asked only while the world runs.
+    if [ "$database" = healthy ] && [ "$world" = running ]; then
+        players=$(psql "SELECT c.name, c.level, c.race, c.class, c.map, ROUND(c.position_x), ROUND(c.position_y) FROM characters.characters c JOIN auth.account a ON a.id = c.account WHERE c.online = 1 AND a.username NOT LIKE 'RNDBOT%' ORDER BY c.level DESC, c.name" | players)
+        nplayers=$(grep -o '"name":' <<<"$players" | wc -l || true)
+        levels=$(psql "SELECT FLOOR((c.level - 1) / 10) * 10 + 1, COUNT(*) FROM characters.characters c JOIN auth.account a ON a.id = c.account WHERE c.online = 1 AND a.username LIKE 'RNDBOT%' GROUP BY 1 ORDER BY 1" | brackets)
+        bots=$(grep -o '"count":[0-9]*' <<<"$levels" | awk -F: '{s += $2} END {print s + 0}')
+        while IFS=$'\t' read -r map x y level; do
+            [ -n "$map" ] || continue
+            dots+="${dots:+,}[$map,$x,$y,$level]"
+        done < <(psql "SELECT c.map, ROUND(c.position_x), ROUND(c.position_y), c.level FROM characters.characters c JOIN auth.account a ON a.id = c.account WHERE c.online = 1 AND a.username LIKE 'RNDBOT%' AND c.map IN (0, 1, 530, 571, 870)")
+    fi
+
+    # The continents' pictures, drawn from the client by the `worldmaps` service.
+    local maps="[]"
+    if [ -s $pd/storage/worldmaps/maps.json ]; then
+        mkdir -p "$out/pandaria"
+        cp -fu $pd/storage/worldmaps/*.png "$out/pandaria/" 2>/dev/null || true
+        maps=$(cat $pd/storage/worldmaps/maps.json)
+    fi
+
+    local errors="[]" log=$pd/storage/logs/Server.log
+    [ ! -f $log ] || errors=$(tail -n 2000 $log | grep -Ev "$pnoise" | tail -n 8 | lines || true)
+
+    local ref settings="" key value
+    ref=$(sed -n 's/^ARG PANDARIA_REF=//p' $pd/Dockerfile 2>/dev/null || true)
+    # As `worldserver-start` reads them: BOTS 300 when unset, the others the config's own.
+    for key in BOTS BOTS_SYNC_LEVEL MAP_THREADS RATE_XP RATE_LOOT RATE_GOLD RATE_REPUTATION RATE_REST; do
+        value=$(sed -n "s/^$key=//p" $pd/.env 2>/dev/null || true)
+        case $key in
+        BOTS) value=${value:-300} ;;
+        BOTS_SYNC_LEVEL) value=${value:-0} ;;
+        *) value=${value:-1} ;;
+        esac
+        settings+="${settings:+,}$(js "$key"):$(js "$value")"
+    done
+    local c=${cpu[$pp-worldserver-1]:-0} m=${mem[$pp-worldserver-1]:-0}
+    history history-pandaria.tsv "$nplayers" "$bots" "$c" "$m"
+    cat <<EOF
+{"state":"$state","services":{"authserver":$(js "$auth"),"worldserver":$(js "$world"),"database":$(js "$database")},
+"since":$(js "$since"),"players":$players,"bots":$bots,"botLevels":$levels,"botPositions":[${dots}],"maps":$maps,
+"game":{"cpu":$c,"memory":$m},"databaseMemory":${mem[$pp-database-1]:-0},
+"software":{"PANDARIA_REF":$(js "$ref")},"settings":{${settings}},"errors":$errors}
+EOF
+}
+
+now() {
+    stats
+    local classic pandaria total available action
+    classic=$(classic) pandaria=$(pandaria)
+    read -r total available < <(free -b | awk '/^Mem:/ {print $2, $7}')
+    action=$(cat "$out/action.json" 2>/dev/null || echo null)
+    cat >"$out/status.json.$$" <<EOF
+{"version":2,"updated":$(date +%s),"address":$(js "$(sed -n 's/^LAN_IP=//p' .env 2>/dev/null || true)"),
+"machine":{"cores":$(nproc),"load":$(cut -d' ' -f1 /proc/loadavg),"memory":$total,"available":$available},
+"classic":$classic,
+"pandaria":$pandaria,
+"action":$action}
+EOF
+    mv "$out/status.json.$$" "$out/status.json"
     cp -f dashboard.html "$out/index.html"
     chmod -R a+rX "$out"
+}
+
+# The two servers take the same ports: starting one stops the other first.
+cstop() { ./home-compose stop realmd mangosd database; }
+pstop() { [ ! -x $pd/home-compose ] || $pd/home-compose stop worldserver authserver database; }
+run() {
+    case "$1 $2" in
+    "classic start") pstop && ./home-compose up -d database realmd mangosd ;;
+    "classic stop") cstop ;;
+    "classic restart") pstop && ./home-compose up -d database realmd mangosd && ./home-compose restart realmd mangosd ;;
+    "classic backup") ./home-backup now ;;
+    "classic settings" | "pandaria settings") settings "$1" ;;
+    "pandaria start") cstop && $pd/home-compose up -d database authserver worldserver ;;
+    "pandaria stop") pstop ;;
+    "pandaria restart") cstop && $pd/home-compose up -d database authserver worldserver && $pd/home-compose restart authserver worldserver ;;
+    *) echo "no such action: $1 $2"; return 2 ;;
+    esac
+}
+
+# A key's value in an `.env` file, in place of any it had.
+setenv() { sed -i "/^$2=/d" "$1" && echo "$2=$3" >>"$1"; }
+
+# The settings a dashboard request holds into the server's `.env`, each key checked against the
+# server's own list and its value against a number's form (`dashboard.py` checked the ranges),
+# then, when the server runs, a restart with them.
+settings() {
+    local server=$1 file=.settings-$1 env=.env keys key value
+    case $server in
+    classic) keys=" BOTS BOTS_NEAR_PLAYERS BOTS_SYNC_LEVEL RATE_XP RATE_LOOT RATE_GOLD RATE_REPUTATION RATE_REST AH_ENABLED AH_PRICES AH_STOCK " ;;
+    pandaria) keys=" BOTS BOTS_SYNC_LEVEL MAP_THREADS RATE_XP RATE_LOOT RATE_GOLD RATE_REPUTATION RATE_REST " env=$pd/.env ;;
+    esac
+    [ -f "$file" ] || { echo "no settings asked for"; return 1; }
+    while IFS='=' read -r key value; do
+        [[ $keys == *" $key "* && $value =~ ^[0-9]{1,4}(\.[0-9]{1,3})?$ ]] || { echo "refused: $key"; rm -f "$file"; return 1; }
+    done <"$file"
+    while IFS='=' read -r key value; do setenv "$env" "$key" "$value"; done <"$file"
+    rm -f "$file"
+    if [ "$server" = classic ]; then
+        # As the launcher's Settings › Home Server writes them: nine bots an account, with room to
+        # spare, and bots that come to the players move on every half hour to two hours.
+        value=$(sed -n 's/^BOTS=//p' .env)
+        setenv .env BOT_ACCOUNTS $((${value:-100} / 9 + 10 > 20 ? ${value:-100} / 9 + 10 : 20))
+        if [ "$(sed -n 's/^BOTS_NEAR_PLAYERS=//p' .env)" = 1 ]; then
+            setenv .env BOTS_MOVE_MIN 1800 && setenv .env BOTS_MOVE_MAX 7200
+        else
+            setenv .env BOTS_MOVE_MIN 7200 && setenv .env BOTS_MOVE_MAX 172800
+        fi
+        [ "$(docker inspect -f '{{.State.Running}}' $p-mangosd-1 2>/dev/null)" != true ] || ./home-compose up -d database realmd mangosd
+    else
+        [ "$(docker inspect -f '{{.State.Running}}' $pp-worldserver-1 2>/dev/null)" != true ] || $pd/home-compose up -d database authserver worldserver
+    fi
+}
+
+# One action at a time, its progress in `action.json` for the dashboard.
+act() {
+    local server=$1 action=$2 started state output dir=.
+    started=$(date +%s)
+    record() {
+        cat >"$out/action.json.$$" <<EOF
+{"server":$(js "$server"),"action":$(js "$action"),"state":"$1","started":$started,"finished":${2:-null},"output":$(printf '%s\n' "${3:-}" | grep -v '^$' | tail -n 6 | lines)}
+EOF
+        mv "$out/action.json.$$" "$out/action.json"
+        chmod a+r "$out/action.json"
+    }
+    # The dashboard offers no button while one runs.
+    exec 9>.action.lock
+    flock -n 9 || return 1
+    local container=$p-mangosd-1
+    [ "$server" = classic ] || dir=$pd container=$pp-worldserver-1
+    if busy "$dir"; then record failed "$(date +%s)" "The server is being set up or updated."; return 1; fi
+    if ! docker inspect "$container" >/dev/null 2>&1; then record failed "$(date +%s)" "The server is not set up."; return 1; fi
+    record running
+    now
+    if output=$(run "$server" "$action" 2>&1); then state=done; else state=failed; fi
+    record $state "$(date +%s)" "$output"
+    now
+}
+
+tick() {
+    exec 8>.status.lock
+    flock -n 8 || return 0
+    now
+    local end=$((SECONDS + 55)) last=$SECONDS f name
+    while ((SECONDS < end)); do
+        for f in "$requests"/*; do
+            [ -e "$f" ] || continue
+            name=${f##*/}
+            # A settings request's lines are kept for `act`; any other request is its name.
+            case $name in *-settings) mv -f "$f" ".settings-${name%-settings}" ;; *) rm -f "$f" ;; esac
+            case $name in
+            classic-start | classic-stop | classic-restart | classic-backup | classic-settings | \
+                pandaria-start | pandaria-stop | pandaria-restart | pandaria-settings)
+                # In the background, without this tick's lock, so the status goes on.
+                (nohup ./home-status act "${name%%-*}" "${name#*-}" >/dev/null 2>&1 8>&- &)
+                last=$((SECONDS - 10))
+                ;;
+            esac
+        done
+        # While an action runs, the status every ten seconds.
+        if ((SECONDS - last >= 10)) && grep -q '"state":"running"' "$out/action.json" 2>/dev/null; then
+            now
+            last=$SECONDS
+        fi
+        sleep 2
+    done
 }
 
 case "${1:-}" in
 now)
     now
     ;;
+tick)
+    tick
+    ;;
+act)
+    act "${2:?server}" "${3:?action}"
+    ;;
+password)
+    # Not from standard input, which holds the password.
+    ./home-compose up -d dashboard >/dev/null 2>&1 </dev/null
+    docker exec -i $p-dashboard-1 python3 /dashboard.py password
+    ;;
 schedule)
-    line="* * * * * $PWD/home-status now >/dev/null 2>&1"
+    line="* * * * * $PWD/home-status tick >/dev/null 2>&1"
     if [[ -d /boot/config/plugins/dynamix ]]; then
         cron=/boot/config/plugins/dynamix/azeroth-survivors-status.cron
         if ! grep -qxF "$line" "$cron" 2>/dev/null; then
@@ -116,16 +350,20 @@ schedule)
             update_cron
         fi
     elif ! crontab -l 2>/dev/null | grep -qxF "$line"; then
-        { crontab -l 2>/dev/null | grep -v 'home-status now' || true; echo "$line"; } | crontab -
+        { crontab -l 2>/dev/null | grep -v 'home-status ' || true; echo "$line"; } | crontab -
     fi
     now
-    if [ "$(docker inspect -f '{{.State.Running}}' "$p-dashboard-1" 2>/dev/null)" != true ]; then
-        ./home-compose up -d dashboard >/dev/null 2>&1
+    # Up, and recreated when compose.lan.yaml changes it.
+    ./home-compose up -d dashboard >/dev/null 2>&1
+    # Pandaria's world maps, for a server set up before they were drawn: once, in the background.
+    if [ -x $pd/home-compose ] && [ ! -s $pd/storage/worldmaps/maps.json ] && [ ! -e $pd/storage/worldmaps/.tried ]; then
+        mkdir -p $pd/storage/worldmaps && touch $pd/storage/worldmaps/.tried
+        (cd $pd && nohup ./home-compose --profile tools run --rm -T worldmaps >storage/worldmaps/log 2>&1 &)
     fi
     echo scheduled
     ;;
 *)
-    echo "usage: home-status now|schedule" >&2
+    echo "usage: home-status now|tick|act <server> <action>|password|schedule" >&2
     exit 2
     ;;
 esac

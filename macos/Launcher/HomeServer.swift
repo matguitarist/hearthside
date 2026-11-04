@@ -156,7 +156,7 @@ final class HomeServer: ObservableObject {
     /// The recipe's scripts and compose files the launcher keeps current on the server; the
     /// compose files take effect at the next start or Apply.
     private static let scripts = ["home-compose", "home-backup", "home-setup", "home-update", "home-status",
-                                  "dashboard.html", "compose.yaml", "compose.lan.yaml"]
+                                  "dashboard.html", "dashboard.py", "compose.yaml", "compose.lan.yaml"]
     private static let mpqs = ["dbc.MPQ", "terrain.MPQ", "model.MPQ", "texture.MPQ", "wmo.MPQ", "patch.MPQ", "patch-2.MPQ"]
 
     private init() {}
@@ -471,6 +471,17 @@ final class HomeServer: ObservableObject {
                                  + "test -s \(folder)/storage/dashboard/azeroth.png -a -s \(folder)/storage/dashboard/kalimdor.png && echo maps",
                                  quiet: true)
         if let out, !out.contains("maps") { await sendWorldMaps() }
+    }
+
+    /// The dashboard's password (`home-status password`, the password on standard input), asked
+    /// for before it starts, stops or changes a server; a new one signs everyone out.
+    func setDashboardPassword(_ password: String) async -> String? {
+        do {
+            _ = try await ssh("\(folder)/home-status password", stdin: password)
+            return nil
+        } catch {
+            return LocalServer.message(error)
+        }
     }
 
     /// The dashboard's two world maps, drawn by the game binary from this Mac's game files, as no

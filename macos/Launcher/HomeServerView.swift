@@ -203,6 +203,7 @@ struct HomeServerSettings: View {
     @State private var newAccount = false
     @State private var passwordFor: String?
     @State private var confirmRemove = false
+    @State private var dashboardPassword = false
 
     var body: some View {
         Form {
@@ -231,6 +232,8 @@ struct HomeServerSettings: View {
                         if let url = home.dashboard {
                             Button("Open Dashboard") { NSWorkspace.shared.open(url) }
                                 .help("The server's page at \(url.absoluteString), for any browser at home")
+                            Button("Dashboard Password…") { dashboardPassword = true }
+                                .help("The password the dashboard asks for before it starts, stops or changes a server")
                         }
                         Button("Show Logs…") { showLogs(.homeServer, openWindow) }
                     }
@@ -307,6 +310,9 @@ struct HomeServerSettings: View {
         .sheet(isPresented: $newAccount) {
             sheet { AccountForm(title: "New account", action: "Create", home: true) { newAccount = false } }
         }
+        .sheet(isPresented: $dashboardPassword) {
+            sheet { DashboardPasswordForm { dashboardPassword = false } }
+        }
         .sheet(item: Binding(get: { passwordFor.map(Named.init) }, set: { passwordFor = $0?.name })) { item in
             sheet { AccountForm(title: "New password", action: "Change", name: item.name, home: true) { passwordFor = nil } }
         }
@@ -324,7 +330,7 @@ struct HomeServerSettings: View {
     private func sheet<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
         VStack(alignment: .trailing, spacing: 12) {
             content()
-            Button("Close") { newAccount = false; passwordFor = nil }
+            Button("Close") { newAccount = false; passwordFor = nil; dashboardPassword = false }
                 .keyboardShortcut(.cancelAction)
         }
         .padding(20)
@@ -333,6 +339,48 @@ struct HomeServerSettings: View {
     private struct Named: Identifiable {
         let name: String
         var id: String { name }
+    }
+}
+
+/// The dashboard's password: anyone at home sees the dashboard, but starting, stopping or changing
+/// a server there asks for it. A new one signs every browser out.
+private struct DashboardPasswordForm: View {
+    @EnvironmentObject private var home: HomeServer
+    let done: () -> Void
+    @State private var password = ""
+    @State private var error: String?
+    @State private var working = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Dashboard password").font(.headline)
+            HStack(spacing: 8) {
+                SecureField("At least six characters", text: $password)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 220)
+                    .onSubmit(submit)
+                Button("Set", action: submit)
+                    .disabled(working || password.count < 6)
+            }
+            if let error {
+                Text(error).font(.caption).foregroundStyle(.red)
+            } else {
+                Text("Asked for before the dashboard starts, stops or changes a server. Setting a new one signs every browser out.")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(width: 300, alignment: .leading)
+            }
+        }
+    }
+
+    private func submit() {
+        guard password.count >= 6, !working else { return }
+        working = true
+        Task {
+            error = await home.setDashboardPassword(password)
+            working = false
+            if error == nil { done() }
+        }
     }
 }
 

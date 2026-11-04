@@ -44,12 +44,15 @@ services:
   worldserver:
     <<: *server
     restart: unless-stopped
-    command: ['/opt/pandaria/bin/worldserver']
+    # The settings in `.env` into the configs first (`worldserver-start`).
+    command: ['/usr/local/bin/worldserver-start']
+    env_file: [.env]
     stop_grace_period: 2m
     stdin_open: true
     ports:
       - ${LAN_IP}:${WORLD_PORT:-8085}:8085
     volumes:
+      - ./worldserver-start:/usr/local/bin/worldserver-start:ro
       - ./storage/data:/data:ro
       - ./storage/logs:/logs
     environment:
@@ -102,6 +105,24 @@ services:
         ls mmaps | grep -q 'mmtile$$'
     volumes:
       - ./storage/data:/data
+
+  # The dashboard's world maps from the client's MPQs (`worldmaps.py`): a minute, once.
+  worldmaps:
+    image: python:3.13-slim-bookworm
+    profiles: ['tools']
+    entrypoint:
+      - /bin/sh
+      - -euc
+      - |
+        apt-get update -qq >/dev/null
+        apt-get install -y -qq --no-install-recommends libstorm9 >/dev/null
+        pip install -q --root-user-action=ignore --disable-pip-version-check pillow
+        python3 /worldmaps.py
+    volumes:
+      - ./worldmaps.py:/worldmaps.py:ro
+      - ${CLIENT_DATA}:/client:ro
+      - ./storage/data:/data:ro
+      - ./storage/worldmaps:/out
 
 volumes:
   pandaria-database:
