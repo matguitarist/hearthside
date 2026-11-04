@@ -25,6 +25,8 @@
 #include <CoreGraphics/CGGeometry.h>
 #include <objc/message.h>
 #include <objc/runtime.h>
+#include <dispatch/dispatch.h>
+#include <pthread.h>
 
 #define DYLD_INTERPOSE(_new, _old) \
     __attribute__((used)) static struct { const void *n, *o; } _interpose_##_old \
@@ -509,8 +511,41 @@ static void surface_info(CGLContextObj ctx, char *out, size_t n) {
              f.size.width, f.size.height, b.size.width, b.size.height, scale, best, sb.size.width, sb.size.height);
 }
 
+// A window larger than its screen, shrunk to the screen's visible area. Started from the launcher,
+// which hides as the client opens, the client maximizes to the largest size it knows (6016x3384)
+// instead of the screen's, and the screen shows only a corner of the game. A fullscreen window
+// is the screen's size, never larger, so it is left alone. On the main thread, as AppKit wants.
+static void fit_window(void *win) {
+    id (*msg)(id, SEL) = (id(*)(id, SEL))objc_msgSend;
+    CGRect (*rect)(id, SEL) = (CGRect(*)(id, SEL))objc_msgSend_stret;
+    id screen = msg((id)win, sel_registerName("screen"));
+    if (!screen) screen = msg((id)objc_getClass("NSScreen"), sel_registerName("mainScreen"));
+    if (!screen) return;
+    CGRect f = rect((id)win, sel_registerName("frame")), s = rect(screen, sel_registerName("frame"));
+    if (f.size.width <= s.size.width + 1 && f.size.height <= s.size.height + 1) return;
+    CGRect fit = rect(screen, sel_registerName("visibleFrame"));
+    ((void (*)(id, SEL, CGRect, BOOL))objc_msgSend)((id)win, sel_registerName("setFrame:display:"), fit, YES);
+    fprintf(stderr, "glhook: window %.0fx%.0f fitted to the screen, %.0fx%.0f\n", f.size.width, f.size.height,
+            fit.size.width, fit.size.height);
+}
+
+// Twice a second, the window of the context being drawn, checked by fit_window.
+static void check_window(void) {
+    static double next;
+    if (now_ms() < next) return;
+    next = now_ms() + 500;
+    id (*msg)(id, SEL) = (id(*)(id, SEL))objc_msgSend;
+    id gl = msg((id)objc_getClass("NSOpenGLContext"), sel_registerName("currentContext"));
+    id view = gl ? msg(gl, sel_registerName("view")) : nil;
+    id win = view ? msg(view, sel_registerName("window")) : nil;
+    if (!win) return;
+    if (pthread_main_np()) fit_window(win);
+    else dispatch_async_f(dispatch_get_main_queue(), win, fit_window);
+}
+
 static CGLError hook_flush(CGLContextObj ctx) {
     read_modes();
+    check_window();
     static double last, window, worst, in_flush;
     static int frames;
     if (getenv("GLHOOK_SHOT")) {
