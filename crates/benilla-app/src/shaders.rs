@@ -16,6 +16,7 @@ pub(crate) fn plugin(app: &mut App) {
     bevy::asset::embedded_asset!(app, "shaders/survivors_grade.wgsl");
     bevy::asset::embedded_asset!(app, "shaders/survivors_fill.wgsl");
     bevy::asset::embedded_asset!(app, "shaders/survivors_ao.wgsl");
+    bevy::asset::embedded_asset!(app, "shaders/survivors_atmos.wgsl");
 }
 
 #[cfg(test)]
