@@ -200,11 +200,11 @@ signs ad-hoc: the app runs on the Mac that built it, with updates off.
    | `MACOS_CERT_P12`, `MACOS_CERT_PASSWORD` | the Developer ID Application certificate and key, exported from Keychain Access as .p12 |
    | `NOTARY_APPLE_ID`, `NOTARY_PASSWORD`, `NOTARY_TEAM_ID` | the Apple ID, an app-specific password for it, and the team |
    | `SPARKLE_PRIVATE_KEY` | the update signing key, exported from the keychain |
-   | `MACOS_ART_KEY` | the passphrase of `macos/art.tar.enc`: Classic's and Pandaria's key art (Blizzard's, so not in the repository in the clear), decrypted into `macos/art/` |
+   | `MACOS_ART_KEY` | the passphrase of `macos/art.tar.enc`: Classic's, Pandaria's and Forever's key art (Blizzard's, so not in the repository in the clear), decrypted into `macos/art/` |
 
-   To change the art, put the new `classic.heic` and `pandaria.heic` in `macos/art/` and
+   To change the art, put the new `classic.heic`, `pandaria.heic` and `forever.heic` (1640×922) in `macos/art/` and
    re-encrypt with the same key:
-   `tar -C macos/art -cf - classic.heic pandaria.heic | openssl enc -aes-256-cbc -pbkdf2 -salt -pass file:<key file> -out macos/art.tar.enc`.
+   `tar -C macos/art -cf - classic.heic pandaria.heic forever.heic | openssl enc -aes-256-cbc -pbkdf2 -salt -pass file:<key file> -out macos/art.tar.enc`.
 
    An App Store Connect API key works for notarization instead: set `NOTARY_KEY_P8` (the .p8
    file's contents), `NOTARY_KEY_ID` and `NOTARY_ISSUER`.

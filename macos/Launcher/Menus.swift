@@ -11,6 +11,7 @@ struct LauncherCommands: Commands {
     @ObservedObject var server: LocalServer
     @ObservedObject var home: HomeServer
     @ObservedObject var pandaria: PandariaServer
+    @ObservedObject var forever: ForeverServer
     @AppStorage(Prefs.modeKey) private var mode: GameMode = .survivors
     @AppStorage(Prefs.classicServerKey) private var classicServer: ClassicServer = .local
     @AppStorage("settingsPane") private var settingsPane = SettingsPane.general
@@ -88,6 +89,18 @@ struct LauncherCommands: Commands {
                 }
                 Button("Pandaria Settings…") { settings(.pandaria) }
             }
+            Section("Forever") {
+                if forever.phase == .running {
+                    Button("Stop Forever") { Task { await forever.stop() } }
+                        .disabled(forever.isBusy || game.running)
+                    Button("Restart Forever") { Task { await forever.restart() } }
+                        .disabled(forever.isBusy || game.running)
+                } else {
+                    Button("Start Forever") { Task { await forever.start() } }
+                        .disabled(!forever.isSetUp || forever.isBusy)
+                }
+                Button("Forever Settings…") { settings(.forever) }
+            }
             Divider()
             Button("Server Logs…") { showLogs(serverLog, openWindow) }
         }
@@ -118,6 +131,7 @@ struct LauncherCommands: Commands {
     private var serverLog: LogSource {
         switch mode {
         case .pandaria: .pandariaWorld
+        case .forever: .foreverWorld
         case .classic where classicServer == .home: .homeServer
         default: .localServer
         }

@@ -1,7 +1,9 @@
 #!/bin/bash
 # The server's data, read from the Forever client on this Mac and copied to the home server:
 #
-#   mac-extract <World of Warcraft folder> [host]
+#   mac-extract <World of Warcraft folder> [[user@]host]
+#
+# HEARTHSIDE_SSH_KEY and FOREVER_REMOTE override the SSH key and the server's folder.
 #
 # The client folder is shared by retail and Forever (well over 100 GB), so the readers run here
 # and only their result (a few GB) travels. They are built for this Mac's Docker the first time
@@ -11,8 +13,10 @@ set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 wow=$(cd "$1" && pwd)
 host=${2:-192.168.40.210}
-key=~/.ssh/id_ed25519_homeserver
-remote=/mnt/cache/appdata/azeroth-survivors-forever
+[[ $host == *@* ]] || host=root@$host
+key=${HEARTHSIDE_SSH_KEY:-~/.ssh/id_ed25519_homeserver}
+remote=${FOREVER_REMOTE:-/mnt/cache/appdata/azeroth-survivors-forever}
+ssh=(ssh -i "$key" -o IdentitiesOnly=yes -o BatchMode=yes)
 out=~/Library/Caches/Hearthside/forever-data
 [ -d "$wow/_forever_" ] || { echo "no _forever_ in $wow" >&2; exit 1; }
 mkdir -p "$out"
@@ -22,6 +26,6 @@ docker run --rm -v "$wow:/wow:ro" -v "$out:/data" azeroth-survivors-forever-tool
 # What the client was, beside the data: a newer client may need the data read again.
 defaults read "$wow/_forever_/World of Warcraft.app/Contents/Info.plist" CFBundleVersion >"$out/client-build"
 
-ssh -i "$key" "root@$host" mkdir -p "$remote/storage/data"
-rsync -a --delete --exclude .work -e "ssh -i $key" "$out/" "root@$host:$remote/storage/data/"
+"${ssh[@]}" "$host" mkdir -p "$remote/storage/data"
+rsync -a --delete --exclude .work -e "${ssh[*]}" "$out/" "$host:$remote/storage/data/"
 echo "copied to $host:$remote/storage/data"

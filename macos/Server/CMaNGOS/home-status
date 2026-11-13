@@ -1,7 +1,8 @@
 #!/bin/bash
-# The home server's dashboard, for this folder's Classic server and the Pandaria one beside it
-# (`../azeroth-survivors-pandaria`). Every minute cron runs `tick`: it writes what the servers are
-# doing into `storage/dashboard/` (`status.json`, a day of `history.tsv` and `history-pandaria.tsv`),
+# The home server's dashboard, for this folder's Classic server and the Pandaria and Forever ones
+# beside it (`../azeroth-survivors-pandaria`, `../azeroth-survivors-forever`). Every minute cron runs
+# `tick`: it writes what the servers are doing into `storage/dashboard/` (`status.json`, a day of
+# `history.tsv`, `history-pandaria.tsv` and `history-forever.tsv`),
 # then for the rest of the minute carries out what the dashboard's buttons ask. The `dashboard`
 # container (`compose.lan.yaml`, `dashboard.py`) serves those files with `dashboard.html` on the LAN
 # address, port 8095, and leaves each request of someone signed in in `storage/dashboard-requests/`,
@@ -10,7 +11,7 @@
 #
 #   home-status now                    write the status
 #   home-status tick                   `now`, then a minute of the dashboard's requests (cron's)
-#   home-status act <server> <action>  classic|pandaria start|stop|restart|settings, classic backup
+#   home-status act <server> <action>  classic|pandaria|forever start|stop|restart|settings, classic backup
 #   home-status password               the dashboard's password, from standard input
 #   home-status schedule               run `tick` every minute and keep the dashboard container up
 set -euo pipefail
@@ -18,6 +19,8 @@ cd "$(dirname "$0")"
 p=azeroth-survivors-cmangos
 pp=azeroth-survivors-pandaria
 pd=../$pp
+fp=azeroth-survivors-forever
+fd=../$fp
 out=storage/dashboard
 requests=storage/dashboard-requests
 mkdir -p "$out" "$requests" storage/dashboard-auth
@@ -29,6 +32,7 @@ health() { docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else
 
 sql() { docker exec "$p-database-1" mariadb -umangos -pmangos -N -B -e "$1" 2>/dev/null; }
 psql() { docker exec "$pp-database-1" mysql -uroot -ppassword -N -B -e "$1" 2>/dev/null; }
+fsql() { docker exec "$fp-database-1" mysql -uroot -ppassword -N -B -e "$1" 2>/dev/null; }
 
 # A setup or an update still running in a server's folder.
 busy() { local f; for f in "$1"/.setup-pid "$1"/.update-pid; do [ -f "$f" ] && kill -0 "$(cat "$f")" 2>/dev/null && return 0; done; return 1; }
@@ -41,7 +45,7 @@ pnoise='EngagementStart called even though creature is already engaged'
 declare -A cpu mem
 stats() {
     local names name c m
-    names=$(docker ps --format '{{.Names}}' | grep -E "^($p-(mangosd|database)|$pp-(worldserver|database))-1$" || true)
+    names=$(docker ps --format '{{.Names}}' | grep -E "^($p-(mangosd|database)|$pp-(worldserver|database)|$fp-(worldserver|database))-1$" || true)
     [ -n "$names" ] || return 0
     # `49.15%|5.419GiB / 22.92GiB`, in bytes.
     while IFS='|' read -r name c m; do
@@ -203,10 +207,63 @@ pandaria() {
 EOF
 }
 
+# WoW Forever (Karrz1's forever-bots): its own ports, so it runs beside the other two. Its bots
+# wake around the players, up to BOTS; the world server logs how many are in the world each minute.
+forever() {
+    if [ ! -x $fd/home-compose ] || ! docker inspect $fp-worldserver-1 >/dev/null 2>&1; then
+        echo '{"state":"missing"}'
+        return
+    fi
+    local bnet world database state since ip port players="[]" bots=0 nplayers=0 levels="[]" bot="b.email LIKE '%@PLAYERBOT-V2.LOCAL'"
+    bnet=$(health $fp-bnetserver-1) world=$(health $fp-worldserver-1) database=$(health $fp-database-1)
+    ip=$(sed -n 's/^LAN_IP=//p' $fd/.env 2>/dev/null || true)
+    port=$(sed -n 's/^WORLD_PORT=//p' $fd/.env 2>/dev/null || true)
+    if [ "$world" != running ]; then state=stopped
+    elif [ -n "$ip" ] && timeout 2 bash -c "</dev/tcp/$ip/${port:-8105}" 2>/dev/null; then state=up
+    else state=starting; fi
+    ! busy $fd || state=busy
+    since=$(docker inspect -f '{{.State.StartedAt}}' "$fp-worldserver-1" 2>/dev/null || true)
+
+    if [ "$database" = healthy ] && [ "$world" = running ]; then
+        local from="FROM characters.characters c JOIN auth.account a ON a.id = c.account JOIN auth.battlenet_accounts b ON b.id = a.battlenet_account WHERE c.online = 1"
+        players=$(fsql "SELECT c.name, c.level, c.race, c.class, c.map, ROUND(c.position_x), ROUND(c.position_y) $from AND NOT $bot ORDER BY c.level DESC, c.name" | players)
+        nplayers=$(grep -o '"name":' <<<"$players" | wc -l || true)
+        levels=$(fsql "SELECT FLOOR((c.level - 1) / 10) * 10 + 1, COUNT(*) $from AND $bot GROUP BY 1 ORDER BY 1" | brackets)
+        bots=$(grep -o '"count":[0-9]*' <<<"$levels" | awk -F: '{s += $2} END {print s + 0}')
+        # The module's own count, when it says more than the characters table.
+        local logged
+        logged=$(tail -c 200000 $fd/storage/logs/Playerbot.log 2>/dev/null | grep -o 'bots_online=[0-9]*' | tail -n 1 | cut -d= -f2 || true)
+        ((${logged:-0} <= bots)) || bots=$logged
+    fi
+
+    local errors="[]" log=$fd/storage/logs/Server.log
+    [ ! -f $log ] || errors=$(tail -n 2000 $log | grep -v '^AHBot' | tail -n 8 | lines || true)
+
+    local settings="" key value
+    # As `forever-start` reads them: BOTS 220 and BOTS_PER_PLAYER 160 when unset, the others 1.
+    for key in BOTS BOTS_PER_PLAYER MAP_THREADS RATE_XP RATE_LOOT RATE_GOLD RATE_REPUTATION RATE_REST; do
+        value=$(sed -n "s/^$key=//p" $fd/.env 2>/dev/null || true)
+        case $key in
+        BOTS) value=${value:-220} ;;
+        BOTS_PER_PLAYER) value=${value:-160} ;;
+        *) value=${value:-1} ;;
+        esac
+        settings+="${settings:+,}$(js "$key"):$(js "$value")"
+    done
+    local c=${cpu[$fp-worldserver-1]:-0} m=${mem[$fp-worldserver-1]:-0}
+    history history-forever.tsv "$nplayers" "$bots" "$c" "$m"
+    cat <<EOF
+{"state":"$state","services":{"bnetserver":$(js "$bnet"),"worldserver":$(js "$world"),"database":$(js "$database")},
+"since":$(js "$since"),"players":$players,"bots":$bots,"botLevels":$levels,"botPositions":[],
+"game":{"cpu":$c,"memory":$m},"databaseMemory":${mem[$fp-database-1]:-0},
+"software":{"FOREVER_REF":$(js "$(sed -n 's/^ARG FOREVER_REF=//p' $fd/Dockerfile 2>/dev/null || true)")},"settings":{${settings}},"errors":$errors}
+EOF
+}
+
 now() {
     stats
-    local classic pandaria total available action
-    classic=$(classic) pandaria=$(pandaria)
+    local classic pandaria forever total available action
+    classic=$(classic) pandaria=$(pandaria) forever=$(forever)
     read -r total available < <(free -b | awk '/^Mem:/ {print $2, $7}')
     action=$(cat "$out/action.json" 2>/dev/null || echo null)
     cat >"$out/status.json.$$" <<EOF
@@ -214,6 +271,7 @@ now() {
 "machine":{"cores":$(nproc),"load":$(cut -d' ' -f1 /proc/loadavg),"memory":$total,"available":$available},
 "classic":$classic,
 "pandaria":$pandaria,
+"forever":$forever,
 "action":$action}
 EOF
     mv "$out/status.json.$$" "$out/status.json"
@@ -221,7 +279,7 @@ EOF
     chmod -R a+rX "$out"
 }
 
-# The two servers take the same ports: starting one stops the other first.
+# Classic and Pandaria take the same ports: starting one stops the other first. Forever has its own.
 cstop() { ./home-compose stop realmd mangosd database; }
 pstop() { [ ! -x $pd/home-compose ] || $pd/home-compose stop worldserver authserver database; }
 run() {
@@ -234,6 +292,10 @@ run() {
     "pandaria start") cstop && $pd/home-compose up -d database authserver worldserver ;;
     "pandaria stop") pstop ;;
     "pandaria restart") cstop && $pd/home-compose up -d database authserver worldserver && $pd/home-compose restart authserver worldserver ;;
+    "forever settings") settings forever ;;
+    "forever start") $fd/home-compose up -d database worldserver bnetserver ;;
+    "forever stop") $fd/home-compose stop bnetserver worldserver database ;;
+    "forever restart") $fd/home-compose up -d database && $fd/home-compose up -d --force-recreate worldserver bnetserver ;;
     *) echo "no such action: $1 $2"; return 2 ;;
     esac
 }
@@ -249,6 +311,7 @@ settings() {
     case $server in
     classic) keys=" BOTS BOTS_NEAR_PLAYERS BOTS_SYNC_LEVEL RATE_XP RATE_LOOT RATE_GOLD RATE_REPUTATION RATE_REST AH_ENABLED AH_PRICES AH_STOCK " ;;
     pandaria) keys=" BOTS BOTS_SYNC_LEVEL MAP_THREADS RATE_XP RATE_LOOT RATE_GOLD RATE_REPUTATION RATE_REST " env=$pd/.env ;;
+    forever) keys=" BOTS BOTS_PER_PLAYER MAP_THREADS RATE_XP RATE_LOOT RATE_GOLD RATE_REPUTATION RATE_REST " env=$fd/.env ;;
     esac
     [ -f "$file" ] || { echo "no settings asked for"; return 1; }
     while IFS='=' read -r key value; do
@@ -267,8 +330,11 @@ settings() {
             setenv .env BOTS_MOVE_MIN 7200 && setenv .env BOTS_MOVE_MAX 172800
         fi
         [ "$(docker inspect -f '{{.State.Running}}' $p-mangosd-1 2>/dev/null)" != true ] || ./home-compose up -d database realmd mangosd
-    else
+    elif [ "$server" = pandaria ]; then
         [ "$(docker inspect -f '{{.State.Running}}' $pp-worldserver-1 2>/dev/null)" != true ] || $pd/home-compose up -d database authserver worldserver
+    else
+        # forever-start reads the settings at each start: a new container for them.
+        [ "$(docker inspect -f '{{.State.Running}}' $fp-worldserver-1 2>/dev/null)" != true ] || $fd/home-compose up -d --force-recreate worldserver
     fi
 }
 
@@ -287,7 +353,10 @@ EOF
     exec 9>.action.lock
     flock -n 9 || return 1
     local container=$p-mangosd-1
-    [ "$server" = classic ] || dir=$pd container=$pp-worldserver-1
+    case $server in
+    pandaria) dir=$pd container=$pp-worldserver-1 ;;
+    forever) dir=$fd container=$fp-worldserver-1 ;;
+    esac
     if busy "$dir"; then record failed "$(date +%s)" "The server is being set up or updated."; return 1; fi
     if ! docker inspect "$container" >/dev/null 2>&1; then record failed "$(date +%s)" "The server is not set up."; return 1; fi
     record running
@@ -310,7 +379,8 @@ tick() {
             case $name in *-settings) mv -f "$f" ".settings-${name%-settings}" ;; *) rm -f "$f" ;; esac
             case $name in
             classic-start | classic-stop | classic-restart | classic-backup | classic-settings | \
-                pandaria-start | pandaria-stop | pandaria-restart | pandaria-settings)
+                pandaria-start | pandaria-stop | pandaria-restart | pandaria-settings | \
+                forever-start | forever-stop | forever-restart | forever-settings)
                 # In the background, without this tick's lock, so the status goes on.
                 (nohup ./home-status act "${name%%-*}" "${name#*-}" >/dev/null 2>&1 8>&- &)
                 last=$((SECONDS - 10))

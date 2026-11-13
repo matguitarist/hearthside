@@ -119,8 +119,9 @@ ditto addons "$APP/Contents/Resources/AddOns"
 
 # Survivors' key art, a 1920×1080 HEIC of a run with its HUD hidden (Alt-Z).
 cp macos/survivors.heic "$APP/Contents/Resources/"
-# Classic's and Pandaria's, Blizzard's key art, kept out of the repository: from `macos/art/`
-# when this Mac has them (classic.heic, pandaria.heic), else those modes show Survivors'.
+# Classic's, Pandaria's and Forever's, Blizzard's key art, kept out of the repository: from
+# `macos/art/` when this Mac has them (classic.heic, pandaria.heic, forever.heic), else those modes
+# show Survivors'.
 for art in macos/art/*.heic; do [ ! -f "$art" ] || cp "$art" "$APP/Contents/Resources/"; done
 # The icon, a sword through a W on a globe: macos/Icon/globe.svg (ember.svg, the same emblem on a
 # warm tile, is the alternative), drawn at each size by AppKit.

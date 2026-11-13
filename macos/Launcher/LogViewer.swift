@@ -59,6 +59,7 @@ enum LogSource: String, CaseIterable, Identifiable, Hashable {
     case game, gamePrevious, localServer, localCommands
     case homeServer, homeRealm, homeDatabase, homeSetup, homeUpdate
     case pandariaWorld, pandariaLogin, pandariaDatabase, pandariaSetup
+    case foreverWorld, foreverLogin, foreverDatabase, foreverSetup
 
     var id: String { rawValue }
 
@@ -77,17 +78,21 @@ enum LogSource: String, CaseIterable, Identifiable, Hashable {
         case .pandariaLogin: "Login server"
         case .pandariaDatabase: "Database errors"
         case .pandariaSetup: "Setup"
+        case .foreverWorld: "Game server"
+        case .foreverLogin: "Login server"
+        case .foreverDatabase: "Database errors"
+        case .foreverSetup: "Setup"
         }
     }
 
     var symbol: String {
         switch self {
         case .game, .gamePrevious: "gamecontroller"
-        case .localServer, .homeServer, .pandariaWorld: "server.rack"
+        case .localServer, .homeServer, .pandariaWorld, .foreverWorld: "server.rack"
         case .localCommands: "terminal"
-        case .homeRealm, .pandariaLogin: "person.badge.key"
-        case .homeDatabase, .pandariaDatabase: "cylinder.split.1x2"
-        case .homeSetup, .pandariaSetup: "hammer"
+        case .homeRealm, .pandariaLogin, .foreverLogin: "person.badge.key"
+        case .homeDatabase, .pandariaDatabase, .foreverDatabase: "cylinder.split.1x2"
+        case .homeSetup, .pandariaSetup, .foreverSetup: "hammer"
         case .homeUpdate: "arrow.triangle.2.circlepath"
         }
     }
@@ -97,11 +102,12 @@ enum LogSource: String, CaseIterable, Identifiable, Hashable {
         case .game, .gamePrevious: "Game"
         case .localServer, .localCommands: "Server on this Mac"
         case .pandariaWorld, .pandariaLogin, .pandariaDatabase, .pandariaSetup: "Pandaria"
+        case .foreverWorld, .foreverLogin, .foreverDatabase, .foreverSetup: "Forever"
         default: "Home server"
         }
     }
 
-    var isHome: Bool { group == "Home server" || group == "Pandaria" }
+    var isHome: Bool { group == "Home server" || group == "Pandaria" || group == "Forever" }
 
     /// What reading it is about, under its title.
     var subtitle: String {
@@ -119,6 +125,10 @@ enum LogSource: String, CaseIterable, Identifiable, Hashable {
         case .pandariaLogin: "Auth.log"
         case .pandariaDatabase: "DBErrors.log"
         case .pandariaSetup: "setup.log"
+        case .foreverWorld: "Server.log"
+        case .foreverLogin: "Bnet.log"
+        case .foreverDatabase: "DBErrors.log"
+        case .foreverSetup: "setup.log"
         }
     }
 
@@ -145,7 +155,7 @@ enum LogSource: String, CaseIterable, Identifiable, Hashable {
         }
     }
 
-    static let groups = ["Game", "Server on this Mac", "Home server", "Pandaria"]
+    static let groups = ["Game", "Server on this Mac", "Home server", "Pandaria", "Forever"]
 }
 
 /// Which log the window shows; set before opening it to go straight to one.
@@ -186,6 +196,7 @@ enum LogReader {
         }
         if source == .localServer { return try await localServer() }
         if source.group == "Pandaria" { return try await PandariaServer.shared.log(source, lines: maxLines) }
+        if source.group == "Forever" { return try await ForeverServer.shared.log(source, lines: maxLines) }
         return try await HomeServer.shared.log(source, lines: maxLines)
     }
 
@@ -297,11 +308,11 @@ enum LogReader {
                 } else {
                     from = "output"; level = guess(message)
                 }
-            case .pandariaWorld, .pandariaLogin, .pandariaDatabase:
+            case .pandariaWorld, .pandariaLogin, .pandariaDatabase, .foreverWorld, .foreverLogin, .foreverDatabase:
                 // TrinityCore writes its files without a time or a level.
-                from = source == .pandariaLogin ? "authserver" : "worldserver"
-                level = source == .pandariaDatabase ? .error : guess(line)
-            case .homeSetup, .homeUpdate, .pandariaSetup:
+                from = source == .pandariaLogin ? "authserver" : source == .foreverLogin ? "bnetserver" : "worldserver"
+                level = source == .pandariaDatabase || source == .foreverDatabase ? .error : guess(line)
+            case .homeSetup, .homeUpdate, .pandariaSetup, .foreverSetup:
                 if let m = match(step, line) {
                     time = m[0]; from = "step"; message = m[1]; level = guess(m[1]) == .error ? .error : .info
                 } else {
@@ -539,6 +550,8 @@ private struct LogView: View {
         case .homeSetup: "The home server has no setup log."
         case .pandariaSetup: "Pandaria has no setup log on the home server."
         case .pandariaWorld, .pandariaLogin: "Start Pandaria (Settings › Pandaria) to see its log."
+        case .foreverSetup: "Forever has no setup log on the home server."
+        case .foreverWorld, .foreverLogin: "Start Forever (Settings › Forever) to see its log."
         default: "Nothing in this log yet."
         }
     }

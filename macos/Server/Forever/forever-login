@@ -1,0 +1,41 @@
+#!/bin/bash
+# The login for the next start of the Forever client: `forever-login <email>`, the password
+# on standard input (forever-play asks for it; the launcher passes it from the Keychain). The
+# login name is the home server's in /etc/hosts (mac-client-setup).
+#
+# What Battle.net's app does for the official realms, against the home server's bnetserver: the
+# password buys a login ticket over TLS, and the ticket goes where the client looks with
+# -launcherlogin: the net.battle preferences, encrypted as the client expects (AES-128-CBC, zero
+# IV, the key PBKDF2-HMAC-SHA1 of Battle.net's entropy XOR the user name, salt "someSalt", 1000
+# rounds).
+set -euo pipefail
+email=$1
+login=trinity.actual.battle.net
+support=~/Library/Application\ Support/Hearthside/Forever
+[ -f "$support/ca.crt" ] || { echo "the client isn't prepared yet: run mac-client-setup first" >&2; exit 1; }
+IFS= read -r password || [ -n "$password" ] || { echo "no password on standard input" >&2; exit 1; }
+
+body=$(EMAIL=$email PASSWORD=$password python3 -I -c 'import json, os
+print(json.dumps({"version": "1.0", "inputs": [
+    {"input_id": "account_name", "value": os.environ["EMAIL"]},
+    {"input_id": "password", "value": os.environ["PASSWORD"]}]}))')
+unset password
+answer=$(curl -fsS --max-time 20 --cacert "$support/ca.crt" -H 'Content-Type: application/json' --data-binary @- \
+    "https://$login:8081/bnetserver/login/" <<<"$body") || { echo "the home server's login didn't answer" >&2; exit 1; }
+unset body
+ticket=$(python3 -I -c 'import json, sys; print(json.load(sys.stdin).get("login_ticket", ""))' <<<"$answer")
+[ -n "$ticket" ] || { echo "the server refused the email or the password" >&2; exit 1; }
+
+# Battle.net's entropy for WEB_TOKEN, XOR the user name's first 16 bytes.
+token=$(TICKET=$ticket python3 -I -c '
+import hashlib, os, subprocess
+entropy = bytes.fromhex("C876F4AE4C952EFEF2FA0F5419C09C43")
+user = os.environ["USER"].encode()[:16]
+password = bytes(e ^ (user[i] if i < len(user) else 0) for i, e in enumerate(entropy))
+key = hashlib.pbkdf2_hmac("sha1", password, b"someSalt", 1000, 16)
+out = subprocess.run(["openssl", "enc", "-aes-128-cbc", "-K", key.hex(), "-iv", "0" * 32],
+                     input=os.environ["TICKET"].encode(), capture_output=True, check=True).stdout
+print(out.hex())')
+defaults write net.battle "Launch Options/WoW/WEB_TOKEN" -data "$token"
+defaults write net.battle "Launch Options/WoW/GAME_ACCOUNT" -string WoW1
+defaults write net.battle "Launch Options/WoW/CONNECTION_STRING" -string "$login:1119"

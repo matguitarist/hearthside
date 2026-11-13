@@ -54,6 +54,8 @@ enum Prefs {
     static let pandariaOcclusionKey = "pandariaAmbientOcclusion"
     static let pandariaMistKey = "pandariaGroundMist"
     static let pandariaFogKey = "pandariaFogLevel"
+    static let foreverFolderKey = "foreverFolder"
+    static let foreverAccountKey = "foreverAccount"
 
     static let defaultDataURL = "https://archive.org/download/WoW_1.12.1-5875/1.12.1-5875_enUS.zip"
 
@@ -65,16 +67,18 @@ enum Prefs {
     }
 }
 
-/// Which game Play starts: the survivors mode, the original game on a 1.12 server, or Mists of
-/// Pandaria with the player's own 5.4.8 client on the home server (`Pandaria.swift`).
+/// Which game Play starts: the survivors mode, the original game on a 1.12 server, Mists of
+/// Pandaria with the player's own 5.4.8 client on the home server (`Pandaria.swift`), or WoW
+/// Forever with the player's own Forever client on the home server (`Forever.swift`).
 enum GameMode: String, CaseIterable, Identifiable {
-    case survivors, classic, pandaria
+    case survivors, classic, pandaria, forever
     var id: String { rawValue }
     var label: String {
         switch self {
         case .survivors: "Survivors"
         case .classic: "Classic"
         case .pandaria: "Pandaria"
+        case .forever: "Forever"
         }
     }
     static var current: GameMode {

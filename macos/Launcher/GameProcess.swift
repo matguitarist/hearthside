@@ -2,7 +2,8 @@ import AppKit
 import Foundation
 
 /// Runs the game binary with its data and settings folders, or for Pandaria the player's 5.4.8
-/// client in its own folder, and tracks it until it quits. Either writes to `game.log`.
+/// client in its own folder, or for Forever Hearthside's copy of the player's Forever client, and
+/// tracks it until it quits. Each writes to `game.log`.
 @MainActor
 final class GameProcess: ObservableObject {
     @Published private(set) var running = false
@@ -46,7 +47,18 @@ final class GameProcess: ObservableObject {
 
             let p = Process()
             let pandaria = GameMode.current == .pandaria
-            if pandaria {
+            let forever = GameMode.current == .forever
+            if forever {
+                guard let binary = ForeverClient.executable, let dir = ForeverClient.dir else {
+                    throw ServerError(ForeverClient.problem ?? "Choose your World of Warcraft folder.")
+                }
+                let address = HomeServer.shared.address
+                try ForeverClient.startRelay(address: address)
+                p.executableURL = binary
+                p.currentDirectoryURL = dir
+                p.arguments = ForeverClient.arguments
+                p.environment = ProcessInfo.processInfo.environment.merging(ForeverClient.environment(address: address)) { $1 }
+            } else if pandaria {
                 guard let binary = PandariaClient.binary, let folder = PandariaClient.folder else {
                     throw ServerError(PandariaClient.problem ?? "Choose your World of Warcraft 5.4.8 folder.")
                 }
@@ -83,8 +95,8 @@ final class GameProcess: ObservableObject {
             process = p
             running = true
             killedByUser = false
-            // The 5.4.8 client logs nothing of its window to wait for.
-            if !pandaria { watch(for: Self.stuckAfter) }
+            // The 5.4.8 and Forever clients log nothing of their window to wait for.
+            if !pandaria && !forever { watch(for: Self.stuckAfter) }
         } catch {
             crash = Crash(message: "The game could not start: \(LocalServer.message(error))", logTail: "")
         }

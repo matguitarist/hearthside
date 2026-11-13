@@ -1,5 +1,6 @@
 #!/bin/bash
-# The Forever client, made to log on to the home server: `mac-client-setup <World of Warcraft folder> [host]`.
+# The Forever client, made to log on to the home server: `mac-client-setup <World of Warcraft folder> [[user@]host]`.
+# HEARTHSIDE_SSH_KEY and FOREVER_REMOTE override the SSH key and the server's folder.
 #
 # Battle.net's app is left as it is. Beside it in `_forever_`, where the game finds its Data, goes a
 # copy, `Hearthside Forever.app`, signed ad hoc without the hardened runtime so that it loads
@@ -13,9 +14,11 @@
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 wow=$(cd "$1" && pwd)
-host=${2:-192.168.40.210}
-key=~/.ssh/id_ed25519_homeserver
-remote=/mnt/cache/appdata/azeroth-survivors-forever
+target=${2:-192.168.40.210}
+[[ $target == *@* ]] || target=root@$target
+host=${target#*@}
+key=${HEARTHSIDE_SSH_KEY:-~/.ssh/id_ed25519_homeserver}
+remote=${FOREVER_REMOTE:-/mnt/cache/appdata/azeroth-survivors-forever}
 login=trinity.actual.battle.net
 dir=$wow/_forever_
 src="$dir/World of Warcraft.app"
@@ -87,7 +90,7 @@ mkdir -p "$dir/WTF"
 } >"$dir/WTF/Hearthside.wtf"
 
 # The login's certificate authority, from the server.
-ssh -i "$key" "root@$host" cat "$remote/storage/certs/ca.crt" >"$support/ca.crt.new"
+ssh -i "$key" -o IdentitiesOnly=yes -o BatchMode=yes "$target" cat "$remote/storage/certs/ca.crt" >"$support/ca.crt.new"
 openssl x509 -in "$support/ca.crt.new" -noout -subject | grep -q 'Hearthside Forever Login CA' || {
     echo "the server sent no certificate authority" >&2; exit 1; }
 mv "$support/ca.crt.new" "$support/ca.crt"

@@ -24,7 +24,8 @@ import time
 
 PASSWORD = "/auth/password"
 SESSION_DAYS = 30
-ACTIONS = {"classic": {"start", "stop", "restart", "backup"}, "pandaria": {"start", "stop", "restart"}}
+ACTIONS = {"classic": {"start", "stop", "restart", "backup"}, "pandaria": {"start", "stop", "restart"},
+           "forever": {"start", "stop", "restart"}}
 # Each setting the dashboard may change: its lowest and highest value, and whether it is whole.
 RATE = (0.1, 10, False)
 SWITCH = (0, 1, True)
@@ -34,6 +35,8 @@ SETTINGS = {
                 "AH_ENABLED": SWITCH, "AH_PRICES": (0.05, 10, False), "AH_STOCK": (0, 10, False)},
     "pandaria": {"BOTS": (0, 2000, True), "BOTS_SYNC_LEVEL": SWITCH, "MAP_THREADS": (1, 16, True),
                  "RATE_XP": RATE, "RATE_LOOT": RATE, "RATE_GOLD": RATE, "RATE_REPUTATION": RATE, "RATE_REST": RATE},
+    "forever": {"BOTS": (0, 2000, True), "BOTS_PER_PLAYER": (0, 500, True), "MAP_THREADS": (1, 16, True),
+                "RATE_XP": RATE, "RATE_LOOT": RATE, "RATE_GOLD": RATE, "RATE_REPUTATION": RATE, "RATE_REST": RATE},
 }
 
 sessions = {}

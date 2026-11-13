@@ -13,6 +13,7 @@ struct LauncherApp: App {
     @ObservedObject private var server = LocalServer.shared
     @ObservedObject private var home = HomeServer.shared
     @ObservedObject private var pandaria = PandariaServer.shared
+    @ObservedObject private var forever = ForeverServer.shared
 
     var body: some Scene {
         Window(Paths.appName, id: "launcher") {
@@ -24,12 +25,13 @@ struct LauncherApp: App {
                 .environmentObject(server)
                 .environmentObject(home)
                 .environmentObject(pandaria)
+                .environmentObject(forever)
         }
         .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentSize)
         .commands {
             LauncherCommands(data: data, game: game, config: config, updater: updater, server: server, home: home,
-                             pandaria: pandaria)
+                             pandaria: pandaria, forever: forever)
         }
 
         Window("Logs", id: "logs") {
@@ -37,6 +39,7 @@ struct LauncherApp: App {
                 .environmentObject(server)
                 .environmentObject(home)
                 .environmentObject(pandaria)
+                .environmentObject(forever)
         }
         .defaultSize(width: 1100, height: 700)
 
@@ -54,6 +57,7 @@ struct LauncherApp: App {
                 .environmentObject(server)
                 .environmentObject(home)
                 .environmentObject(pandaria)
+                .environmentObject(forever)
         }
         .windowResizability(.contentMinSize)
     }
@@ -85,6 +89,7 @@ enum Launcher {
     static func play(game: GameProcess, config: GameConfig) {
         guard !game.running else { game.activate(); return }
         if GameMode.current == .pandaria { playPandaria(game); return }
+        if GameMode.current == .forever { playForever(game); return }
         guard GameMode.current == .classic else { start(game); return }
         Addons.sync()
         switch ClassicServer.current {
@@ -125,10 +130,22 @@ enum Launcher {
         }
     }
 
+    /// Forever: its server up (started here when stopped), then the client readied and signed in.
+    private static func playForever(_ game: GameProcess) {
+        let forever = ForeverServer.shared
+        Task { @MainActor in
+            await forever.refresh()
+            if forever.phase == .stopped || forever.phase == .starting { await forever.start() }
+            guard forever.phase == .running, !game.running, await forever.prepareClient() else { return }
+            start(game)
+        }
+    }
+
     /// Classic on this Mac or the home server, and Pandaria, play once that server is set up and
     /// holds an account; Pandaria also needs the 5.4.8 client's folder.
     static func canPlay(server: LocalServer, home: HomeServer) -> Bool {
         if GameMode.current == .pandaria { return PandariaServer.shared.canPlay && PandariaClient.problem == nil }
+        if GameMode.current == .forever { return ForeverServer.shared.canPlay && ForeverClient.problem == nil }
         guard GameMode.current == .classic else { return true }
         switch ClassicServer.current {
         case .remote: return true

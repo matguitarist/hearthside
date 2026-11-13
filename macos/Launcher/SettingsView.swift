@@ -3,7 +3,7 @@ import SwiftUI
 
 /// The panes of Settings, in its sidebar.
 enum SettingsPane: String, CaseIterable, Identifiable {
-    case general, graphics, sound, survivors, server, homeServer, homeGame, homeMaintenance, pandaria, advanced
+    case general, graphics, sound, survivors, server, homeServer, homeGame, homeMaintenance, pandaria, forever, advanced
 
     var id: String { rawValue }
 
@@ -18,6 +18,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .homeGame: "Bots & Rates"
         case .homeMaintenance: "Backups & Updates"
         case .pandaria: "Pandaria"
+        case .forever: "Forever"
         case .advanced: "Advanced"
         }
     }
@@ -33,6 +34,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .homeGame: "person.2"
         case .homeMaintenance: "clock.arrow.circlepath"
         case .pandaria: "mountain.2"
+        case .forever: "infinity"
         case .advanced: "wrench.and.screwdriver"
         }
     }
@@ -42,6 +44,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         ("Azeroth Survivors", [.survivors]),
         ("Classic servers", [.server, .homeServer, .homeGame, .homeMaintenance]),
         ("Mists of Pandaria", [.pandaria]),
+        ("WoW Forever", [.forever]),
         (nil, [.advanced]),
     ]
 }
@@ -52,6 +55,7 @@ struct SettingsView: View {
     @EnvironmentObject private var server: LocalServer
     @EnvironmentObject private var home: HomeServer
     @EnvironmentObject private var pandaria: PandariaServer
+    @EnvironmentObject private var forever: ForeverServer
 
     var body: some View {
         NavigationSplitView {
@@ -74,6 +78,7 @@ struct SettingsView: View {
                                 if p == .server { StatusDot(health: server.health) }
                                 if p == .homeServer { StatusDot(health: home.health) }
                                 if p == .pandaria { StatusDot(health: pandaria.health) }
+                                if p == .forever { StatusDot(health: forever.health) }
                             }
                             .tag(p)
                         }
@@ -104,6 +109,7 @@ struct SettingsView: View {
         case .homeGame: HomeGameSettings()
         case .homeMaintenance: HomeMaintenanceSettings()
         case .pandaria: PandariaSettings()
+        case .forever: ForeverSettings()
         case .advanced: AdvancedSettings()
         }
     }

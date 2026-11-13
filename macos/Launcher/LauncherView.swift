@@ -9,6 +9,7 @@ struct LauncherView: View {
     @EnvironmentObject private var server: LocalServer
     @EnvironmentObject private var home: HomeServer
     @EnvironmentObject private var pandaria: PandariaServer
+    @EnvironmentObject private var forever: ForeverServer
     @Environment(\.openWindow) private var openWindow
     @AppStorage(Prefs.skipLauncherKey) private var skipLauncher = false
     @AppStorage(Prefs.modeKey) private var mode: GameMode = .survivors
@@ -45,7 +46,7 @@ struct LauncherView: View {
                         }
                         .pickerStyle(.segmented)
                         .labelsHidden()
-                        .frame(width: 300)
+                        .frame(width: 380)
                         .disabled(game.running)
                     }
                 }
@@ -130,6 +131,7 @@ struct LauncherView: View {
                     .frame(maxWidth: 560, alignment: .leading)
             case .classic: classic
             case .pandaria: PandariaPanel().frame(maxWidth: 560, alignment: .leading)
+            case .forever: ForeverPanel().frame(maxWidth: 560, alignment: .leading)
             }
 
         case .missing(let files):
@@ -238,6 +240,7 @@ struct LauncherView: View {
     private func prewarm() {
         Task {
             if mode == .pandaria { await pandaria.refresh(); return }
+            if mode == .forever { await forever.refresh(); return }
             if mode == .classic, classicServer == .home { await home.refresh(); return }
             await server.refresh()
             guard mode == .classic, classicServer == .local, !game.running, server.phase == .stopped else { return }
@@ -296,8 +299,8 @@ extension GameProcess.Crash: Equatable {
     static func == (a: Self, b: Self) -> Bool { a.id == b.id }
 }
 
-/// The launcher's key art per mode: `survivors.heic` (`macos/survivors.heic`), and Classic's and
-/// Pandaria's when the app was built with them (`macos/art/`), else Survivors'.
+/// The launcher's key art per mode: `survivors.heic` (`macos/survivors.heic`), and Classic's,
+/// Pandaria's and Forever's when the app was built with them (`macos/art/`), else Survivors'.
 @MainActor
 enum KeyArt {
     private static var cache: [GameMode: NSImage] = [:]
@@ -308,6 +311,7 @@ enum KeyArt {
         case .survivors: "survivors"
         case .classic: "classic"
         case .pandaria: "pandaria"
+        case .forever: "forever"
         }
         let url = Bundle.main.url(forResource: name, withExtension: "heic")
             ?? Bundle.main.url(forResource: "survivors", withExtension: "heic")

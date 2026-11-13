@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Azeroth Servers</title>
-<!-- The home server's dashboard, for its Classic and Pandaria servers: `home-status` writes
+<!-- The home server's dashboard, for its Classic, Pandaria and Forever servers: `home-status` writes
      status.json and the history files beside this page every minute; it reads them every 30
      seconds, and its buttons ask `dashboard.py` to start, stop or restart a server. Self-contained,
      no outside requests. -->
@@ -78,7 +78,8 @@ code { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
 .servers button { font: inherit; font-weight: 600; display: inline-flex; align-items: center; gap: 8px; padding: 5px 14px;
                   background: var(--card); color: var(--dim); border: 1px solid var(--line); cursor: pointer; }
 .servers button:first-child { border-radius: 999px 0 0 999px; }
-.servers button:last-child { border-radius: 0 999px 999px 0; margin-left: -1px; }
+.servers button:last-child { border-radius: 0 999px 999px 0; }
+.servers button + button { margin-left: -1px; }
 .servers button.on { color: var(--text); background: var(--line); }
 .servers button[hidden] { display: none; }
 .servers button:only-child, .servers button:has(+ button[hidden]) { border-radius: 999px; }
@@ -119,6 +120,7 @@ form.settings .row { grid-column: 1 / -1; display: flex; gap: 8px; justify-conte
     <span class="servers" id="servers">
       <button data-server="classic"><span class="dot" id="dot-classic"></span>Classic</button>
       <button data-server="pandaria"><span class="dot" id="dot-pandaria"></span>Pandaria</button>
+      <button data-server="forever"><span class="dot" id="dot-forever"></span>Forever</button>
     </span>
     <span class="updated" id="updated">Loading…</span>
     <button class="btn small signin" id="signin">Sign in</button>
@@ -226,6 +228,7 @@ const RATES = [0.5, 1, 1.5, 2, 3, 5];
 // off, "count" for a number of bots), per server as `home-status` and `dashboard.py` allow.
 const SETTINGS = {
   BOTS: ["Bots", "count"],
+  BOTS_PER_PLAYER: ["Bots around each player", "count"],
   BOTS_NEAR_PLAYERS: ["Bots come to players", "switch"],
   BOTS_SYNC_LEVEL: ["Bots near players' level", "switch"],
   MAP_THREADS: ["World threads", [1, 2, 3, 4, 6, 8]],
@@ -235,7 +238,8 @@ const SETTINGS = {
   AH_PRICES: ["Auction prices", [0.2, 0.35, 0.5, 0.75, 1, 1.5]],
   AH_STOCK: ["Auction stock", [0.25, 0.5, 1, 1.5, 2, 3]],
 };
-const NAMES = {classic: "Classic", pandaria: "Pandaria"};
+const NAMES = {classic: "Classic", pandaria: "Pandaria", forever: "Forever"};
+const SERVERS = Object.keys(NAMES);
 const STATES = {up: ["up", "Running"], starting: ["working", "Starting"], busy: ["working", "Setting up or updating"],
                 stopped: ["down", "Stopped"], missing: ["down", "Not set up"]};
 const DOING = {start: "Starting", stop: "Stopping", restart: "Restarting", backup: "Backing up", settings: "Applying the settings to"};
@@ -262,12 +266,13 @@ const ago = t => {
 
 // A status written before Pandaria joined: the Classic server's fields at the top level.
 function normalize(s) {
-  if (s.version >= 2) return s;
+  // A status written before Forever joined has none.
+  if (s.version >= 2) return Object.assign({forever: {state: "missing"}}, s);
   const v = s.services || {};
   const state = v.realmd === "healthy" && v.mangosd === "healthy" ? "up"
     : v.mangosd === "starting" || v.realmd === "starting" ? "starting" : v.mangosd === "missing" ? "missing" : "stopped";
   return {updated: s.updated, address: s.address, machine: s.machine, action: null,
-          classic: Object.assign({}, s, {state}), pandaria: {state: "missing"}};
+          classic: Object.assign({}, s, {state}), pandaria: {state: "missing"}, forever: {state: "missing"}};
 }
 
 function spark(id, points, max) {
@@ -372,13 +377,14 @@ function openEditor() {
   const field = ([k, [name, kind]]) => {
     const v = settings[k];
     if (kind === "switch") return `<label>${name}<input type="checkbox" name="${k}" ${v === "1" ? "checked" : ""}></label>`;
-    if (kind === "count") return `<label>${name}<input type="number" name="${k}" min="0" max="2000" step="50" value="${esc(v)}" required></label>`;
+    if (kind === "count") return `<label>${name}<input type="number" name="${k}" min="0" max="2000" step="10" value="${esc(v)}" required></label>`;
     const choices = kind.map(String).includes(v) ? kind.map(String) : [v, ...kind.map(String)];
     return `<label>${name}<select name="${k}">${choices.map(c => `<option ${c === v ? "selected" : ""}>${esc(c)}</option>`).join("")}</select></label>`;
   };
   const form = $("settings-form");
   form.innerHTML = Object.entries(SETTINGS).filter(([k]) => settings[k] !== undefined && settings[k] !== "").map(field).join("") +
-    (shown === "pandaria" ? `<div class="hint note">World threads: how many cores update the continents at once. More helps when bots spread over several continents.</div>` : "") +
+    (shown !== "classic" ? `<div class="hint note">World threads: how many cores update the continents at once. More helps when bots spread over several continents.</div>` : "") +
+    (shown === "forever" ? `<div class="hint note">Forever's bots wake around the players: up to "Bots around each player" near each one, and never more than "Bots" in all.</div>` : "") +
     `<div class="row"><span class="note">${running ? "Saving restarts the server: anyone playing is disconnected for a few minutes." : "Saved for the next start."}</span>
        <button class="btn" type="button" id="edit-cancel">Cancel</button><button class="btn primary">${running ? "Save &amp; restart" : "Save"}</button></div>`;
   $("edit-cancel").addEventListener("click", () => { editing = false; draw(); });
@@ -407,7 +413,7 @@ function draw() {
     b.classList.toggle("on", b.dataset.server === shown);
     b.hidden = s[b.dataset.server].state === "missing" && b.dataset.server !== shown;
   });
-  for (const k of ["classic", "pandaria"]) $("dot-" + k).className = "dot " + STATES[s[k].state][0];
+  for (const k of SERVERS) $("dot-" + k).className = "dot " + STATES[s[k].state][0];
   $("signin").textContent = session.signedIn ? "Sign out" : "Sign in";
 
   const [cls, label] = STATES[g.state];
@@ -462,7 +468,9 @@ function draw() {
     $("spark-cpu-sub").textContent = `average ${(cpu.reduce((a, b) => a + b, 0) / cpu.length / 100).toFixed(1)} cores, peak ${(Math.max(...cpu) / 100).toFixed(1)}`;
   }
 
-  drawMap(g);
+  // Forever's world is its own (new continents): no map of it yet.
+  $("map-card").hidden = shown === "forever";
+  if (shown !== "forever") drawMap(g);
   // The backups are the Classic server's.
   $("backups-card").hidden = shown !== "classic";
   if (shown === "classic") {
@@ -478,13 +486,15 @@ function draw() {
   $("software").innerHTML = shown === "classic"
     ? `CMaNGOS ${ref("CMANGOS_REF")} · playerbots ${ref("PLAYERBOTS_REF")} · classic-db ${ref("CLASSICDB_REF")}` +
       (g.updated_software ? ` · updated ${new Date(g.updated_software).toLocaleDateString()}` : "")
+    : shown === "forever" ? `WoW Forever · Karrz1's forever-bots ${ref("FOREVER_REF")}`
     : `Mists of Pandaria 5.4.8 · LoA-Pandaria-Playerbots ${ref("PANDARIA_REF")}`;
 
   const errors = g.errors || [];
   $("errors").classList.toggle("log", shown !== "classic");
   $("errors-title").textContent = shown === "classic" ? "Latest server errors" : "Latest server log";
   $("errors").innerHTML = errors.length ? errors.map(esc).join("\n") : `<span class="ok">${shown === "classic" ? "No errors lately." : "Nothing logged lately."}</span>`;
-  $("errors-sub").textContent = "The bots' harmless " + (shown === "classic" ? "pathing, cooldown and spell" : "combat") + " messages are left out.";
+  $("errors-sub").textContent = shown === "forever" ? "The auction house bot's sales are left out."
+    : "The bots' harmless " + (shown === "classic" ? "pathing, cooldown and spell" : "combat") + " messages are left out.";
 }
 
 async function load() {
@@ -497,14 +507,14 @@ async function load() {
     return schedule();
   }
   try { session = await (await fetch("session", {cache: "no-store"})).json(); } catch (e) {}
-  for (const [k, file] of [["classic", "history.tsv"], ["pandaria", "history-pandaria.tsv"]]) {
+  for (const [k, file] of [["classic", "history.tsv"], ["pandaria", "history-pandaria.tsv"], ["forever", "history-forever.tsv"]]) {
     try {
       const text = s[k].state === "missing" ? "" : await (await fetch(file + "?t=" + Date.now(), {cache: "no-store"})).text();
       hists[k] = text.trim().split("\n").map(l => l.split("\t").map(Number)).filter(r => r.length >= 5);
     } catch (e) { hists[k] = []; }
   }
   // At first the server that runs, else Classic, unless one was chosen before.
-  if (!shown || !s[shown] || (s[shown].state === "missing" && !last))
+  if (!shown || !NAMES[shown] || (s[shown].state === "missing" && !last))
     shown = s.pandaria.state !== "missing" && s.pandaria.state !== "stopped" && s.classic.state !== "up" ? "pandaria" : "classic";
   const age = Date.now() / 1000 - s.updated;
   $("updated").innerHTML = age > 180 ? `<span class="stale">Not updated for ${Math.round(age / 60)} minutes</span>`
@@ -536,11 +546,12 @@ async function post(path, body, pendingAs) {
 
 async function ask(action) {
   const server = action === "backup" ? "classic" : shown, s = last;
-  const other = server === "classic" ? "pandaria" : "classic";
+  // Classic and Pandaria share their ports; Forever has its own.
+  const other = server === "classic" ? "pandaria" : server === "pandaria" ? "classic" : null;
   const questions = {
     stop: `Stop ${NAMES[server]}? Anyone playing is disconnected.`,
     restart: `Restart ${NAMES[server]}? Anyone playing is disconnected for a few minutes.`,
-    start: s[other].state === "up" || s[other].state === "starting"
+    start: other && (s[other].state === "up" || s[other].state === "starting")
       ? `Start ${NAMES[server]}? ${NAMES[other]} stops first: the two servers share their ports.` : null,
   };
   if (questions[action] && !confirm(questions[action])) return;

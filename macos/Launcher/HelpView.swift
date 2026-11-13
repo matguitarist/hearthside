@@ -4,7 +4,7 @@ import SwiftUI
 /// The Help window: a few topics, searchable, opened from the Help menu at the one asked for.
 
 enum HelpTopic: String, CaseIterable, Identifiable {
-    case start, survivors, controls, classic, addons, homeServer, pandaria, graphics, troubleshooting, shortcuts
+    case start, survivors, controls, classic, addons, homeServer, pandaria, forever, graphics, troubleshooting, shortcuts
 
     var id: String { rawValue }
 
@@ -17,6 +17,7 @@ enum HelpTopic: String, CaseIterable, Identifiable {
         case .addons: "Classic Addons"
         case .homeServer: "Home Server"
         case .pandaria: "Pandaria"
+        case .forever: "Forever"
         case .graphics: "Graphics & Performance"
         case .troubleshooting: "Troubleshooting"
         case .shortcuts: "Keyboard Shortcuts"
@@ -32,6 +33,7 @@ enum HelpTopic: String, CaseIterable, Identifiable {
         case .addons: "puzzlepiece.extension"
         case .homeServer: "house"
         case .pandaria: "mountain.2"
+        case .forever: "infinity"
         case .graphics: "display"
         case .troubleshooting: "stethoscope"
         case .shortcuts: "command"
@@ -41,11 +43,11 @@ enum HelpTopic: String, CaseIterable, Identifiable {
     var blocks: [HelpBlock] {
         switch self {
         case .start:
-            [.p("Hearthside plays **Survivors**, Azeroth Survivors: a free, fan-made WoW roguelike by Aethus, running on a from-scratch WoW 1.12.1 client. It also plays **Classic**, the original 1.12.1 game, on a server of your own, and **Pandaria**, Mists of Pandaria 5.4.8 on your home server with your own 5.4.8 client."),
+            [.p("Hearthside plays **Survivors**, Azeroth Survivors: a free, fan-made WoW roguelike by Aethus, running on a from-scratch WoW 1.12.1 client. It also plays **Classic**, the original 1.12.1 game, on a server of your own, **Pandaria**, Mists of Pandaria 5.4.8 on your home server with your own 5.4.8 client, and **Forever**, Blizzard's WoW Forever with bots on your home server, with your own Forever client."),
              .h("The game data"),
              .p("On first launch the launcher downloads the WoW 1.12.1 game data (about 5.4 GB). The download resumes where it stopped and every file is checked. If you already have a 1.12.1 **Data** folder, choose it in **Settings › General › Folder** instead."),
              .h("Playing"),
-             .bullets(["Pick **Survivors**, **Classic** or **Pandaria** in the launcher, or in **Game › Mode**.",
+             .bullets(["Pick **Survivors**, **Classic**, **Pandaria** or **Forever** in the launcher, or in **Game › Mode**.",
                        "Press **Play** (⌘P). The launcher steps aside while the game runs.",
                        "When the game quits the launcher comes back, or quits: **Settings › General › When the game quits**.",
                        "Hold ⌥ Option while opening the app to see the launcher when **Start the game directly** is on."]),
@@ -101,7 +103,7 @@ enum HelpTopic: String, CaseIterable, Identifiable {
              .h("Bots & Rates"),
              .p("The number of bots (each 100 take about 1 GB of memory), whether they come to the zones where people play, whether they stay near the players' level, and the experience, loot, gold, reputation and rested rates, and the auction house bot: whether it trades, its prices and how much it stocks. **Apply** restarts the game server once for all of them."),
              .h("Dashboard"),
-             .p("**Open Dashboard** (Server menu) shows the Classic and Pandaria servers in any browser at home: who is playing, the bots by level and on a world map, memory and CPU over the last day, backups and settings. Anyone at home can look. To start, stop or restart a server, back up Classic, or change the bots, rates and Pandaria's world threads there, sign in with the password **Dashboard Password…** sets in Settings › Home Server."),
+             .p("**Open Dashboard** (Server menu) shows the Classic, Pandaria and Forever servers in any browser at home: who is playing, the bots by level and on a world map, memory and CPU over the last day, backups and settings. Anyone at home can look. To start, stop or restart a server, back up Classic, or change the bots, rates and world threads there, sign in with the password **Dashboard Password…** sets in Settings › Home Server."),
              .h("Backups & Updates"),
              .p("Every night at 4:30 the server saves its accounts and characters and keeps the last 14. **Back Up Now** and **Restore…** are in **Settings › Backups & Updates**; a restore saves the current state first. **Check for Updates** compares the server with the newest CMaNGOS; **Update Server…** rebuilds it, keeps everyone's characters, and puts the old server back if anything fails.")]
         case .pandaria:
@@ -114,6 +116,16 @@ enum HelpTopic: String, CaseIterable, Identifiable {
              .p("The first Play prepares your client: it is patched to sign in to your server, its graphics get fixes for current macOS, AMD FSR sharpening, and Survivors' ambient occlusion and ground mist (in **Settings › Pandaria**, occlusion can be turned off and the fog set from Off to Ultra), and it is signed for this Mac. It runs under Rosetta 2 and needs Apple's command line developer tools (xcode-select --install). **Settings › Pandaria › Prepare Again** redoes it; an update that changes the fixes redoes it at the next Play."),
              .h("One server at a time"),
              .p("Pandaria and Classic on the home server use the same ports, so starting one stops the other. Pandaria keeps running when the game quits; stop it in the **Server** menu.")]
+        case .forever:
+            [.p("Plays WoW Forever with bots, on a TrinityCore server (Karrz1's forever-bots) built on your home server beside Classic and Pandaria. It needs a home server (see **Home Server**), WoW Forever installed by Battle.net on this Mac, and Docker on this Mac (OrbStack or Docker Desktop) for the setup: no Blizzard files ship with this app."),
+             .h("Setting it up"),
+             .bullets(["Pick **Forever** in the launcher, then **Choose World of Warcraft Folder…**: the one Battle.net installed, holding _forever_.",
+                       "**Set Up Forever** builds the server on the home server from source, an hour or more on a small CPU, while this Mac reads the game data from your client in Docker and sends it over (a few GB). Keep the launcher open until the data is sent; the build carries on without it.",
+                       "When it runs, create your account in the launcher: an email, which is only its name on your server, and a password. Then press **Play**."]),
+             .h("The client"),
+             .p("Battle.net's app stays as it is. The first Play makes a copy beside it, **Hearthside Forever.app**, that signs in to your server instead of Blizzard's. macOS asks once for an administrator's password, to send the login's name to your server, then to trust your server's login certificate. Hearthside keeps your password in the Keychain and signs in for you at each Play. When Battle.net updates the game, the next Play makes a new copy; after a big update, **Settings › Forever › Send the Game Data Again** brings the server up to date. Preparing needs Apple's command line developer tools (xcode-select --install)."),
+             .h("Bots"),
+             .p("The bots wake around the players and sleep again when nobody is near: **Settings › Forever › Bots** sets how many around each player and how many in all. Forever has its own ports, so it runs beside Classic or Pandaria. It keeps running when the game quits; stop it in the **Server** menu.")]
         case .graphics:
             [.p("Graphics and sound are in **Settings › Graphics** and **Sound**, or in the game's own Settings. They are locked while the game runs, which saves its own copy when it quits."),
              .bullets(["**Presets:** Performance, Balanced and Quality set several options at once.",

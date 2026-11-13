@@ -1,5 +1,8 @@
 #!/bin/bash
-# A Battle.net account on the home server's Forever realm, from this Mac: `forever-account [--gm] [host]`.
+# A Battle.net account on the home server's Forever realm, from this Mac:
+# `forever-account [--gm | --password] [[user@]host]`; --password gives an account a new one.
+# In Terminal it asks for the email and the password; otherwise it reads them from standard input,
+# a line each (the launcher). HEARTHSIDE_SSH_KEY and FOREVER_REMOTE override the key and the folder.
 #
 # The server makes it (`bnetaccount create` over SOAP, inside the server's network): Battle.net
 # accounts keep an SRP6 v2 verifier this script does not compute. The password goes over SSH to that
@@ -7,23 +10,30 @@
 # here the first time: its random password lives in the server's `storage/soap-password` (root only),
 # its salt and verifier (TrinityCore's Grunt SRP6: g = 7, little-endian numbers) go in by SQL.
 set -euo pipefail
-[ -t 0 ] || { echo "$(basename "$0") asks for a password: run it in Terminal" >&2; exit 1; }
-gm=0
+gm=0 change=0
 [[ ${1:-} == --gm ]] && { gm=3; shift; }
+[[ ${1:-} == --password ]] && { change=1; shift; }
 host=${1:-192.168.40.210}
-key=~/.ssh/id_ed25519_homeserver
-remote=/mnt/cache/appdata/azeroth-survivors-forever
+[[ $host == *@* ]] || host=root@$host
+key=${HEARTHSIDE_SSH_KEY:-~/.ssh/id_ed25519_homeserver}
+remote=${FOREVER_REMOTE:-/mnt/cache/appdata/azeroth-survivors-forever}
 p=azeroth-survivors-forever
-on_server() { ssh -i "$key" "root@$host" "$@"; }
+on_server() { ssh -i "$key" -o IdentitiesOnly=yes -o BatchMode=yes "$host" "$@"; }
 sql() { on_server docker exec -i $p-database-1 mysql -uroot -ppassword -N -B auth 2>/dev/null; }
 
-read -rp "Email: " email
-[[ $email =~ ^[^@[:space:]]+@[^@[:space:]]+$ ]] || { echo "not an email address" >&2; exit 1; }
-read -rsp "Password: " pass; echo
-read -rsp "Again: " again; echo
-[[ $pass == "$again" ]] || { echo "the passwords differ" >&2; exit 1; }
-[[ ${#pass} -ge 4 && ${#pass} -le 16 ]] || { echo "4 to 16 characters" >&2; exit 1; }
-unset again
+if [ -t 0 ]; then
+    read -rp "Email: " email
+    read -rsp "Password: " pass; echo
+    read -rsp "Again: " again; echo
+    [[ $pass == "$again" ]] || { echo "the passwords differ" >&2; exit 1; }
+    unset again
+else
+    IFS= read -r email
+    IFS= read -r pass || true
+fi
+[[ $email =~ ^[^@[:space:]\'\"]+@[^@[:space:]\'\"]+$ ]] || { echo "not an email address" >&2; exit 1; }
+[[ ${#pass} -ge 4 && ${#pass} -le 16 ]] || { echo "a password of 4 to 16 characters" >&2; exit 1; }
+[[ $pass != *[[:space:]]* ]] || { echo "a password without spaces" >&2; exit 1; }
 
 if ! on_server test -s "$remote/storage/soap-password"; then
     echo "making the SOAP account…"
@@ -46,10 +56,14 @@ SQL
 fi
 
 # The request, escaped for XML, on the server's standard input: never in a command line.
-envelope=$(EMAIL=$email PASS=$pass python3 -I -c '
+envelope=$(EMAIL=$email PASS=$pass CHANGE=$change python3 -I -c '
 import os
 from xml.sax.saxutils import escape
-command = escape("bnetaccount create " + os.environ["EMAIL"] + " " + os.environ["PASS"])
+email, password = os.environ["EMAIL"], os.environ["PASS"]
+if os.environ["CHANGE"] == "1":
+    command = escape(f"bnetaccount set password {email} {password} {password}")
+else:
+    command = escape(f"bnetaccount create {email} {password}")
 print(f"""<?xml version="1.0" encoding="utf-8"?>
 <SOAP-ENV:Envelope xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ns1="urn:TC">
 <SOAP-ENV:Body><ns1:executeCommand><command>{command}</command></ns1:executeCommand></SOAP-ENV:Body>
@@ -61,7 +75,7 @@ answer=$(on_server "docker run --rm -i --network ${p}_default curlimages/curl:8.
 unset envelope
 result=$(sed -n 's:.*<result>\(.*\)</result>.*:\1:p; s:.*<faultstring>\(.*\)</faultstring>.*:\1:p' <<<"$answer")
 echo "${result:-$answer}"
-grep -qi 'created' <<<"$result" || exit 1
+grep -qE 'account created|password was changed' <<<"$result" || exit 1
 
 if ((gm)); then
     sql <<SQL
