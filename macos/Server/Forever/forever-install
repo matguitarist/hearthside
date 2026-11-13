@@ -1,0 +1,61 @@
+#!/bin/bash
+# The setup's database and certificate step, once, in the server image:
+#
+# - the four TrinityCore databases, empty, and their user: the worldserver's first start fills them
+#   (world and hotfixes from the release in its folder, auth and characters from `sql/base`);
+# - the bots' shared database, `playerbot`, from the module's dumps;
+# - the login's certificate. The client logs in over TLS to trinity.actual.battle.net, so the server
+#   has a certificate for that name from a certificate authority of its own, limited to
+#   actual.battle.net, which the Mac then trusts. The authority's key stays in `certs/ca`, readable by
+#   root only, to renew the certificate (`forever-install` again, when it nears its end).
+set -euo pipefail
+mysql=(mysql -hdatabase -uroot "-p$MYSQL_ROOT_PASSWORD")
+until "${mysql[@]}" -e 'SELECT 1' >/dev/null 2>&1; do sleep 2; done
+
+"${mysql[@]}" <<'SQL'
+CREATE USER IF NOT EXISTS 'forever'@'%' IDENTIFIED BY 'forever';
+CREATE DATABASE IF NOT EXISTS auth DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE IF NOT EXISTS characters DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE IF NOT EXISTS world DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE IF NOT EXISTS hotfixes DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+GRANT ALL ON auth.* TO 'forever'@'%';
+GRANT ALL ON characters.* TO 'forever'@'%';
+GRANT ALL ON world.* TO 'forever'@'%';
+GRANT ALL ON hotfixes.* TO 'forever'@'%';
+GRANT ALL ON playerbot.* TO 'forever'@'%';
+SQL
+
+shared=/src/sql/playerbot_shared
+if [ "$("${mysql[@]}" -N -B -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'playerbot'")" = 0 ]; then
+    echo "importing the bots' shared database…"
+    "${mysql[@]}" <"$shared/playerbot_shared_schema.sql"
+    "${mysql[@]}" playerbot <"$shared/playerbot_shared_data.sql"
+fi
+
+host=trinity.actual.battle.net
+mkdir -p /certs/ca
+cd /certs
+umask 077
+if [ ! -f ca/hearthside-ca.key ]; then
+    echo "making the login's certificate authority…"
+    openssl req -x509 -newkey rsa:4096 -sha256 -nodes -days 3650 -keyout ca/hearthside-ca.key -out ca.crt \
+        -subj "/CN=Hearthside Forever Login CA" \
+        -addext "basicConstraints=critical,CA:TRUE,pathlen:0" \
+        -addext "keyUsage=critical,keyCertSign,cRLSign" \
+        -addext "nameConstraints=critical,permitted;DNS:actual.battle.net"
+fi
+# The server's certificate: 825 days, the most macOS trusts.
+if ! openssl x509 -in forever.cert.pem -noout -checkend $((30 * 86400)) >/dev/null 2>&1; then
+    echo "making the login's certificate…"
+    openssl req -newkey rsa:2048 -sha256 -nodes -keyout forever.key.pem -out ca/server.csr -subj "/CN=$host"
+    printf '%s\n' "basicConstraints=critical,CA:FALSE" "keyUsage=critical,digitalSignature,keyEncipherment" \
+        "extendedKeyUsage=serverAuth" "subjectAltName=DNS:$host,DNS:*.actual.battle.net" >ca/server.ext
+    openssl x509 -req -in ca/server.csr -CA ca.crt -CAkey ca/hearthside-ca.key -CAcreateserial -days 825 -sha256 \
+        -extfile ca/server.ext -out ca/server.crt
+    cat ca/server.crt ca.crt >forever.cert.pem
+    rm ca/server.csr ca/server.ext
+    openssl verify -CAfile ca.crt ca/server.crt
+fi
+chmod 644 ca.crt forever.cert.pem
+chmod 600 forever.key.pem
+echo installed

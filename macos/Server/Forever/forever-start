@@ -1,0 +1,131 @@
+#!/bin/bash
+# A server's start, in its container: `forever-start worldserver|bnetserver`. Writes its config from
+# the image's `.dist` and the settings in `.env` (passed as the environment; the dashboard writes
+# them), then starts it. A setting left unset keeps ForeverCore's own value, but for BOTS: 220.
+#
+#   LAN_IP          the address players reach (the realm's, and the login name's inside the network)
+#   WORLD_PORT      the world's port on that address
+#   ACCEPT_BUILDS   client builds let in besides the realm's own (ForeverCore keeps it on 70707)
+#   LOGIN_DEBUG     1: the login's every connection and request in Bnet.log
+#   BOTS            most world bots at once; RATE_* the usual rates; MAP_THREADS the map threads
+set -euo pipefail
+etc=/opt/forever/etc
+: "${LAN_IP:?}" "${WORLD_PORT:?}"
+builds=${ACCEPT_BUILDS:-70862,70888,70938}
+db() { echo "\"database;3306;forever;forever;$1\""; }
+
+# `set_key <file> <key> <value>`: the key's line set to the value, or added at the end.
+set_key() {
+    local file=$1 key=$2 value=$3
+    K=$key V=$value awk '
+        BEGIN { k = ENVIRON["K"]; v = ENVIRON["V"] }
+        index($0, k) == 1 && substr($0, length(k) + 1) ~ /^[ \t]*=/ { if (!done) print k " = " v; done = 1; next }
+        { print }
+        END { if (!done) print k " = " v }' "$file" >"$file.new"
+    mv "$file.new" "$file"
+}
+# `rate <value> <key>…`: each key set, when there is a value.
+rate() {
+    local value=$1 key
+    shift
+    [ -n "$value" ] || return 0
+    for key in "$@"; do set_key "$etc/worldserver.conf" "$key" "$value"; done
+}
+
+worldserver() {
+    local f=$etc/worldserver.conf
+    cp "$f.dist" "$f"
+    set_key "$f" LoginDatabaseInfo "$(db auth)"
+    set_key "$f" WorldDatabaseInfo "$(db world)"
+    set_key "$f" CharacterDatabaseInfo "$(db characters)"
+    set_key "$f" HotfixDatabaseInfo "$(db hotfixes)"
+    # What the Forever client needs (ForeverCore's doc/ForeverSetup.md).
+    set_key "$f" RealmID 70
+    set_key "$f" Expansion 0
+    set_key "$f" Network.SkipBuildAuthKeyCheck 1
+    set_key "$f" Network.EnterEncryptedModeRegionGroup 8
+    set_key "$f" Realm.CfgContentSetID 137
+    set_key "$f" Realm.SuperDistrictID 2
+    set_key "$f" Realm.AlsoAcceptBuilds "\"$builds\""
+    # The container's places, the updater (it reads `sql/` under SourceDirectory), SOAP for the
+    # launcher's commands inside the network, a console for `docker attach`.
+    set_key "$f" BindIP '"0.0.0.0"'
+    # The same port inside as outside: entering the world, the server sends the client to its own
+    # port for the instance connection (SMSG_CONNECT_TO), so that one must be the published one.
+    set_key "$f" WorldServerPort "$WORLD_PORT"
+    set_key "$f" DataDir '"/data"'
+    set_key "$f" LogsDir '"/logs"'
+    set_key "$f" SourceDirectory '"/src"'
+    set_key "$f" MySQLExecutable '"/usr/bin/mysql"'
+    set_key "$f" Updates.EnableDatabases 15
+    set_key "$f" Updates.AutoSetup 1
+    set_key "$f" mmap.enablePathFinding 1
+    set_key "$f" Logger.sql.sql 5,DBErrors
+    set_key "$f" Ra.Enable 0
+    set_key "$f" SOAP.Enabled 1
+    set_key "$f" SOAP.IP '"0.0.0.0"'
+    rate "${RATE_XP:-}" Rate.XP.Kill Rate.XP.Quest Rate.XP.Explore
+    rate "${RATE_LOOT:-}" Rate.Drop.Item.Poor Rate.Drop.Item.Normal Rate.Drop.Item.Uncommon Rate.Drop.Item.Rare \
+        Rate.Drop.Item.Epic Rate.Drop.Item.Legendary Rate.Drop.Item.Artifact
+    rate "${RATE_GOLD:-}" Rate.Drop.Money
+    rate "${RATE_REPUTATION:-}" Rate.Reputation.Gain
+    rate "${RATE_REST:-}" Rate.Rest.InGame Rate.Rest.Offline.InTavernOrCity Rate.Rest.Offline.InWilderness
+    rate "${MAP_THREADS:-}" MapUpdate.Threads
+
+    # The bots: the module's own files in worldserver.conf.d stay; this one, read last, wins.
+    mkdir -p "$etc/worldserver.conf.d"
+    {
+        echo "[worldserver]"
+        echo "Playerbot.World.MaxBots = ${BOTS:-220}"
+        [ -z "${BOTS_PER_PLAYER:-}" ] || echo "Playerbot.World.BotsPerPlayer = $BOTS_PER_PLAYER"
+    } >"$etc/worldserver.conf.d/zz-z-hearthside.conf"
+
+    # The realm as the home server serves it, as the updater's last file: applied before the realm
+    # and the builds are read, and again when a value changes. Only realm 70 (Normal) runs here.
+    local sql=/src/sql/custom/auth/2099_12_31_99_auth_hearthside.sql b
+    {
+        echo "-- Written by forever-start from the server's .env."
+        for b in ${builds//,/ }; do
+            echo "INSERT IGNORE INTO \`build_info\` (\`build\`,\`majorVersion\`,\`minorVersion\`,\`bugfixVersion\`,\`hotfixVersion\`) VALUES ($b,1,60,1,NULL);"
+        done
+        echo "DELETE FROM \`realmlist\` WHERE \`id\` IN (71,72,73);"
+        echo "UPDATE \`realmlist\` SET \`name\`='Hearthside (bots)', \`address\`='$LAN_IP', \`localAddress\`='$LAN_IP', \`port\`=$WORLD_PORT WHERE \`id\`=70;"
+    } >"$sql"
+
+    [ -f /data/vmaps/GameObjectModels.dtree ] || { echo "no game data in /data: run mac-extract on the Mac" >&2; exit 1; }
+    cd /opt/forever/bin
+    exec ./worldserver -c "$f"
+}
+
+bnetserver() {
+    local f=$etc/bnetserver.conf
+    cp "$f.dist" "$f"
+    set_key "$f" LoginDatabaseInfo "$(db auth)"
+    set_key "$f" BindIP '"0.0.0.0"'
+    set_key "$f" LoginREST.ExternalAddress trinity.actual.battle.net
+    set_key "$f" LoginREST.LocalAddress trinity.actual.battle.net
+    set_key "$f" CertificatesFile '"/certs/forever.cert.pem"'
+    set_key "$f" PrivateKeyFile '"/certs/forever.key.pem"'
+    set_key "$f" LogsDir '"/logs"'
+    set_key "$f" Realm.CfgContentSetID 137
+    set_key "$f" Realm.SuperDistrictID 2
+    set_key "$f" Realm.AlsoAcceptBuilds "\"$builds\""
+    # LOGIN_DEBUG=1: every connection and request of the login in Bnet.log, to find why a client stops.
+    if [ "${LOGIN_DEBUG:-0}" = 1 ]; then
+        local key
+        for key in Logger.session Logger.session.packets Logger.server.http Logger.server.http.login \
+            Logger.server.http.session.login Logger.server.http.dispatcher.login Logger.realmlist; do
+            set_key "$f" "$key" "1,Console Bnet"
+        done
+    fi
+    # It reads the realms and builds once: wait for the worldserver's updater to have written ours.
+    local last=${builds##*,}
+    until [ "$(mysql -hdatabase -uforever -pforever -N -B auth -e \
+        "SELECT COUNT(*) FROM realmlist r JOIN build_info b ON b.build = $last WHERE r.id = 70 AND r.port = $WORLD_PORT" 2>/dev/null)" = 1 ]; do
+        sleep 5
+    done
+    cd /opt/forever/bin
+    exec ./bnetserver -c "$f"
+}
+
+"$@"

@@ -1,0 +1,68 @@
+#!/bin/bash
+# Logs on to the home server's Forever realm and starts the client:
+# `forever-play <World of Warcraft folder> <email> [host]`.
+#
+# What Battle.net's app does for the official realms, against the home server's bnetserver: the
+# password (asked without echo) buys a login ticket over TLS, the ticket goes where the client looks
+# with -launcherlogin (the net.battle preferences, encrypted as the client expects: AES-128-CBC,
+# zero IV, the key PBKDF2-HMAC-SHA1 of Battle.net's entropy XOR the user name, salt "someSalt",
+# 1000 rounds), then Hearthside's copy of the client starts with keyswap loaded.
+set -euo pipefail
+[ -t 0 ] || { echo "$(basename "$0") asks for a password: run it in Terminal" >&2; exit 1; }
+wow=$(cd "$1" && pwd)
+email=$2
+host=${3:-192.168.40.210}
+here=$(cd "$(dirname "$0")" && pwd)
+login=trinity.actual.battle.net
+app="$wow/_forever_/Hearthside Forever.app"
+support=~/Library/Application\ Support/Hearthside/Forever
+# The server's public key for the encrypted mode: TrinityCore's, made from the private key in
+# AuthenticationPackets.cpp.
+server_key=02596F0D0C061A8B30745988FD72C59E29EC367FB0F341F28E0F08D037BAFC69
+[ -d "$app" ] || { echo "run mac-client-setup first" >&2; exit 1; }
+# The copy's keyswap must be this one, which keeps the copy off Blizzard's login servers.
+[ "$(cat "$here/client/keyswap.c" "$here/client/badge.swift" | shasum -a 256)" = "$(cat "$app/Contents/Resources/keyswap.sources" 2>/dev/null)" ] ||
+    { echo "the client copy is older than client/keyswap.c: run mac-client-setup again" >&2; exit 1; }
+
+read -rsp "Password for $email: " password; echo
+body=$(EMAIL=$email PASSWORD=$password python3 -I -c 'import json, os
+print(json.dumps({"version": "1.0", "inputs": [
+    {"input_id": "account_name", "value": os.environ["EMAIL"]},
+    {"input_id": "password", "value": os.environ["PASSWORD"]}]}))')
+unset password
+answer=$(curl -fsS --cacert "$support/ca.crt" -H 'Content-Type: application/json' --data-binary @- \
+    "https://$login:8081/bnetserver/login/" <<<"$body")
+unset body
+ticket=$(python3 -I -c 'import json, sys; print(json.load(sys.stdin).get("login_ticket", ""))' <<<"$answer")
+[ -n "$ticket" ] || { echo "the server refused the login: $answer" >&2; exit 1; }
+
+# Battle.net's entropy for WEB_TOKEN, XOR the user name's first 16 bytes.
+token=$(TICKET=$ticket python3 -I -c '
+import hashlib, os, subprocess
+entropy = bytes.fromhex("C876F4AE4C952EFEF2FA0F5419C09C43")
+user = os.environ["USER"].encode()[:16]
+password = bytes(e ^ (user[i] if i < len(user) else 0) for i, e in enumerate(entropy))
+key = hashlib.pbkdf2_hmac("sha1", password, b"someSalt", 1000, 16)
+out = subprocess.run(["openssl", "enc", "-aes-128-cbc", "-K", key.hex(), "-iv", "0" * 32],
+                     input=os.environ["TICKET"].encode(), capture_output=True, check=True).stdout
+print(out.hex())')
+defaults write net.battle "Launch Options/WoW/WEB_TOKEN" -data "$token"
+defaults write net.battle "Launch Options/WoW/GAME_ACCOUNT" -string WoW1
+defaults write net.battle "Launch Options/WoW/CONNECTION_STRING" -string "$login:1119"
+
+# The game won't connect to a private address for the Battle.net login. It goes to localhost
+# instead, where client/relay.py forwards it to the home server while the game runs.
+pgrep -f "^$app/Contents/MacOS/" >/dev/null && { echo "the Forever client is already running" >&2; exit 1; }
+executable="$app/Contents/MacOS/$(defaults read "$app/Contents/Info.plist" CFBundleExecutable)"
+nohup python3 -I "$here/client/relay.py" "$host" "$executable" 1119 >"$support/relay.log" 2>&1 &
+for _ in 1 2 3 4 5 6 7 8 9 10; do grep -q listening "$support/relay.log" && break; sleep 0.5; done
+grep -q listening "$support/relay.log" || { echo "the login relay didn't start: $(cat "$support/relay.log")" >&2; exit 1; }
+
+log="$support/keyswap.log"
+: >"$log"
+open -n -a "$app" \
+    --env "DYLD_INSERT_LIBRARIES=$app/Contents/Frameworks/keyswap.dylib" \
+    --env "KEYSWAP_KEY=$server_key" --env KEYSWAP_GROUP=8 --env "KEYSWAP_LOG=$log" --env "KEYSWAP_LOGIN=$host" \
+    --env KEYSWAP_LOGIN_NAME=localhost --env "KEYSWAP_CA=$support/ca.der" \
+    --args -launcherlogin -config Hearthside.wtf
+echo "started; keyswap's notes in $log"

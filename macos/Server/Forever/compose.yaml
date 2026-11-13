@@ -1,0 +1,83 @@
+# The WoW Forever server on the home server: bnetserver (the Battle.net login), worldserver with the
+# bots, and MySQL 8.0, ports on the LAN address only. Its ports are its own (1119 and 8081 for the
+# login, WORLD_PORT for the world, see `home-compose`), so it runs beside the other servers.
+
+name: azeroth-survivors-forever
+
+x-server: &server
+  image: azeroth-survivors-forever:1
+  depends_on:
+    database:
+      condition: service_healthy
+  # The login's name, which the servers resolve themselves (bnetserver refuses to start otherwise).
+  extra_hosts:
+    - trinity.actual.battle.net:${LAN_IP}
+  env_file: [.env]
+  environment:
+    - TZ=Etc/UTC
+  # The start script from this folder, so a change to it needs no new image.
+  volumes:
+    - ./forever-start:/usr/local/bin/forever-start:ro
+
+services:
+  database:
+    image: mysql:8.0
+    restart: unless-stopped
+    stop_grace_period: 2m
+    command: ['--innodb-buffer-pool-size=1G', '--innodb-flush-log-at-trx-commit=2', '--max-allowed-packet=1G',
+              '--skip-log-bin', '--character-set-server=utf8mb4', '--collation-server=utf8mb4_unicode_ci']
+    healthcheck:
+      test: ['CMD-SHELL', 'mysqladmin ping -uroot -p"$$MYSQL_ROOT_PASSWORD" --silent']
+      interval: 1m
+      timeout: 5s
+      retries: 5
+      start_period: 10m
+      start_interval: 2s
+    volumes:
+      - forever-database:/var/lib/mysql
+    environment:
+      - TZ=Etc/UTC
+      - MYSQL_ROOT_PASSWORD=password # Not published: the database is reachable from the containers only.
+
+  worldserver:
+    <<: *server
+    build: .
+    restart: unless-stopped
+    command: ['/usr/local/bin/forever-start', 'worldserver']
+    # The first start imports the world (several minutes): not to be cut short.
+    stop_grace_period: 2m
+    # The console, for `docker attach` (leave with Control-P, Control-Q).
+    stdin_open: true
+    tty: true
+    ports:
+      # The same port inside: the client is sent back to it for the instance connection.
+      - ${LAN_IP}:${WORLD_PORT:-8105}:${WORLD_PORT:-8105}
+    volumes:
+      - ./forever-start:/usr/local/bin/forever-start:ro
+      - ./storage/data:/data:ro
+      - ./storage/logs:/logs
+
+  bnetserver:
+    <<: *server
+    restart: unless-stopped
+    command: ['/usr/local/bin/forever-start', 'bnetserver']
+    ports:
+      - ${LAN_IP}:1119:1119
+      - ${LAN_IP}:8081:8081
+    volumes:
+      - ./forever-start:/usr/local/bin/forever-start:ro
+      - ./storage/certs:/certs:ro
+      - ./storage/logs:/logs
+
+  # Setup only: the empty databases, the bots' shared one, the login's certificate (`forever-install`).
+  install:
+    <<: *server
+    profiles: ['tools']
+    command: ['/usr/local/bin/forever-install']
+    environment:
+      - MYSQL_ROOT_PASSWORD=password
+    volumes:
+      - ./storage/certs:/certs
+
+volumes:
+  forever-database:

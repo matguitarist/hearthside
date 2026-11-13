@@ -1,0 +1,26 @@
+#!/bin/bash
+# The Forever server's setup on a home server, detached from the launcher that copied this folder
+# here: the server built from source (an hour or more on a small CPU), its databases and the login's
+# certificate, then the first start, which imports the world. The game data comes from the Mac
+# (`mac-extract`), where the client is: the first start waits for it. A step already done is
+# skipped, so a setup can run again. `.setup-step` holds the step in progress, then `.setup-done`
+# or `.setup-failed`; the output goes to `setup.log`.
+set -euo pipefail
+cd "$(dirname "$0")"
+echo $$ > .setup-pid
+rm -f .setup-done .setup-failed
+trap '[ -f .setup-done ] || touch .setup-failed; rm -f .setup-pid' EXIT
+dc() { ./home-compose "$@"; }
+step() { echo "$1" > .setup-step; echo "== $(date '+%F %T') $1"; shift; "$@"; }
+build() { docker image inspect azeroth-survivors-forever:1 >/dev/null 2>&1 || docker buildx build --load -t azeroth-survivors-forever:1 .; }
+data() {
+    until [ -f storage/data/vmaps/GameObjectModels.dtree ] && compgen -G 'storage/data/mmaps/*.mmtile' >/dev/null; do sleep 30; done
+}
+if [ -d /mnt/user/appdata ]; then chown -R nobody:users . 2>/dev/null || true; fi
+mkdir -p storage/logs storage/data storage/certs
+step "Building the server from source (an hour or more)…" build
+step "Making the databases and the login's certificate…" dc --profile tools run --rm -T install
+step "Waiting for the game data from the Mac…" data
+step "Starting the server: the first start imports the world…" dc up -d database worldserver bnetserver
+touch .setup-done
+echo "== $(date '+%F %T') done"

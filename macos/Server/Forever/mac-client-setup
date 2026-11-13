@@ -1,0 +1,121 @@
+#!/bin/bash
+# The Forever client, made to log on to the home server: `mac-client-setup <World of Warcraft folder> [host]`.
+#
+# Battle.net's app is left as it is. Beside it in `_forever_`, where the game finds its Data, goes a
+# copy, `Hearthside Forever.app`, signed ad hoc without the hardened runtime so that it loads
+# `keyswap.dylib` (client/keyswap.c: the server's key in the client's realm keys). The copy is made
+# again when Battle.net updates the game (`Resources/hearthside.source` holds the build it came
+# from). `WTF/Hearthside.wtf` points the client at the login name, trinity.actual.battle.net.
+#
+# Once: that name in /etc/hosts, at the home server (an administrator prompt), and the server's
+# login certificate authority trusted for it (macOS's own prompt) (`forever-install` made it; it can only vouch for
+# actual.battle.net names).
+set -euo pipefail
+here=$(cd "$(dirname "$0")" && pwd)
+wow=$(cd "$1" && pwd)
+host=${2:-192.168.40.210}
+key=~/.ssh/id_ed25519_homeserver
+remote=/mnt/cache/appdata/azeroth-survivors-forever
+login=trinity.actual.battle.net
+dir=$wow/_forever_
+src="$dir/World of Warcraft.app"
+app="$dir/Hearthside Forever.app"
+[ -d "$src" ] || { echo "no World of Warcraft.app in $dir" >&2; exit 1; }
+build=$(defaults read "$src/Contents/Info.plist" CFBundleVersion)
+support=~/Library/Application\ Support/Hearthside/Forever
+mkdir -p "$support"
+
+if [ "$(cat "$app/Contents/Resources/hearthside.source" 2>/dev/null)" != "$build" ] ||
+    [ "$(cat "$here/client/keyswap.c" "$here/client/badge.swift" | shasum -a 256)" != "$(cat "$app/Contents/Resources/keyswap.sources" 2>/dev/null)" ]; then
+    echo "copying the client ($build)…"
+    tmp="$dir/.hearthside-copy"
+    rm -rf "$tmp"
+    ditto "$src" "$tmp"
+    xattr -cr "$tmp"
+    mkdir -p "$tmp/Contents/Frameworks"
+    xcrun clang -arch arm64 -arch x86_64 -dynamiclib -O2 -framework Network -framework Security -framework CoreFoundation "$here/client/keyswap.c" -o "$tmp/Contents/Frameworks/keyswap.dylib"
+    cat "$here/client/keyswap.c" "$here/client/badge.swift" | shasum -a 256 >"$tmp/Contents/Resources/keyswap.sources"
+    echo "$build" >"$tmp/Contents/Resources/hearthside.source"
+    # Its own name and icon (the game's, with a FOREVER banner: client/badge.swift), so it stands
+    # apart from Battle.net's app and from Pandaria's client in the Dock, Finder and Settings.
+    plist="$tmp/Contents/Info.plist"
+    /usr/libexec/PlistBuddy -c "Set :CFBundleName 'Hearthside Forever'" "$plist"
+    # Its own identifier too: every Blizzard client is com.blizzard.worldofwarcraft, and macOS's
+    # privacy settings (Local Network among them) tell apps apart by it, so the copy would be taken
+    # for another client (Pandaria's) and refused without being asked.
+    /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.hearthside.forever" "$plist"
+    /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string 'Hearthside Forever'" "$plist" 2>/dev/null ||
+        /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName 'Hearthside Forever'" "$plist"
+    icon="$tmp/Contents/Resources/$(/usr/libexec/PlistBuddy -c "Print :CFBundleIconFile" "$plist")"
+    icon=${icon%.icns}.icns
+    work=$(mktemp -d)
+    xcrun swiftc -O "$here/client/badge.swift" -o "$work/badge"
+    iconutil -c iconset -o "$work/icon.iconset" "$icon"
+    for png in "$work"/icon.iconset/*.png; do "$work/badge" "$png" "$png"; done
+    iconutil -c icns -o "$icon" "$work/icon.iconset"
+    rm -rf "$work"
+    # The login and the realm are on the home network: macOS lets an app reach the LAN only with
+    # Local Network access, which it asks for only when the app says why.
+    /usr/libexec/PlistBuddy -c "Add :NSLocalNetworkUsageDescription string 'Hearthside connects the game to your home server.'" \
+        "$tmp/Contents/Info.plist" 2>/dev/null ||
+        /usr/libexec/PlistBuddy -c "Set :NSLocalNetworkUsageDescription 'Hearthside connects the game to your home server.'" "$tmp/Contents/Info.plist"
+    # The official entitlements, and what loading keyswap needs.
+    cat >"$support/entitlements.plist" <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>com.apple.security.cs.allow-jit</key><true/>
+<key>com.apple.security.cs.allow-unsigned-executable-memory</key><true/>
+<key>com.apple.security.cs.disable-executable-page-protection</key><true/>
+<key>com.apple.security.device.audio-input</key><true/>
+<key>com.apple.security.cs.disable-library-validation</key><true/>
+<key>com.apple.security.cs.allow-dyld-environment-variables</key><true/>
+</dict></plist>
+PLIST
+    # Inside out: the helper, the files beside the executable, the library, then the app.
+    for h in "$tmp"/Contents/Helpers/*.app; do codesign --force --deep --sign - "$h"; done
+    for f in "$tmp"/Contents/MacOS/*.dat "$tmp/Contents/Frameworks/keyswap.dylib"; do codesign --force --sign - "$f"; done
+    codesign --force --sign - --entitlements "$support/entitlements.plist" "$tmp"
+    rm -rf "$app"
+    mv "$tmp" "$app"
+fi
+
+mkdir -p "$dir/WTF"
+{
+    grep -v '^SET portal ' "$dir/WTF/Config.wtf" 2>/dev/null || true
+    echo "SET portal \"$login\""
+} >"$dir/WTF/Hearthside.wtf"
+
+# The login's certificate authority, from the server.
+ssh -i "$key" "root@$host" cat "$remote/storage/certs/ca.crt" >"$support/ca.crt.new"
+openssl x509 -in "$support/ca.crt.new" -noout -subject | grep -q 'Hearthside Forever Login CA' || {
+    echo "the server sent no certificate authority" >&2; exit 1; }
+mv "$support/ca.crt.new" "$support/ca.crt"
+# The same, as keyswap reads it: it adds it to the game's own roots.
+openssl x509 -in "$support/ca.crt" -outform der -out "$support/ca.der"
+
+hosts_ok() { grep -Eq "^$host[[:space:]]+$login\$" /etc/hosts; }
+# The game trusts only certificates the system trusts at the administrator level (the user's own
+# trust settings are not enough): the authority goes into the System keychain, trusted there.
+in_system() { security find-certificate -c "Hearthside Forever Login CA" /Library/Keychains/System.keychain >/dev/null 2>&1; }
+trust_ok() { in_system && security dump-trust-settings -d 2>/dev/null | grep -q "Hearthside Forever Login CA"; }
+if ! hosts_ok || ! in_system; then
+    echo "asking for an administrator's password: the login name in /etc/hosts, the certificate in the System keychain…"
+    script=$(mktemp)
+    cat >"$script" <<SH
+set -e
+sed -i '' '/[[:space:]]$login\$/d' /etc/hosts
+echo "$host $login" >> /etc/hosts
+dscacheutil -flushcache; killall -HUP mDNSResponder 2>/dev/null || true
+security add-certificates -k /Library/Keychains/System.keychain "$support/ca.crt" || true
+SH
+    osascript -e "do shell script \"/bin/bash '$script'\" with administrator privileges"
+    rm -f "$script"
+fi
+# The trust itself is set from the user's own session: macOS asks for it in its own dialog (a root
+# script without a window is refused).
+if ! trust_ok; then
+    echo "asking macOS to trust the server's login certificate authority…"
+    security add-trusted-cert -d -r trustRoot "$support/ca.crt"
+fi
+echo "ready: $app"

@@ -1,0 +1,36 @@
+#!/bin/bash
+# The server's data from the Forever client, in the tools image (`mac-extract` runs it): the client's
+# "World of Warcraft" folder at /wow (read-only), the result in /data: dbc, gt, cameras and maps,
+# the buildings' line-of-sight models (vmaps), then the movement maps the bots walk on (mmaps).
+# A step whose result is there already is skipped.
+set -euo pipefail
+shopt -s nullglob
+# `any <glob>`: whether it matches a file.
+any() { [ $# -gt 0 ]; }
+bin=/opt/forever/bin
+product=${CASC_PRODUCT:-wowf}
+[ -f /wow/.build.info ] && [ -d /wow/Data ] || { echo "/wow is not a World of Warcraft folder" >&2; exit 1; }
+cd /data
+
+if ! any maps/*.map || [ ! -d dbc ]; then
+    echo "== maps, dbc, gt, cameras"
+    rm -rf maps dbc gt cameras
+    "$bin/mapextractor" -i /wow -o /data -p "$product"
+    any maps/*.map || { echo "no maps read: is $product the client's product?" >&2; exit 1; }
+fi
+
+if [ ! -f vmaps/GameObjectModels.dtree ]; then
+    echo "== vmaps"
+    rm -rf .work vmaps && mkdir -p .work vmaps
+    (cd .work && "$bin/vmap4extractor" -d /wow -p "$product" && "$bin/vmap4assembler" Buildings ../vmaps)
+    rm -rf .work
+    [ -f vmaps/GameObjectModels.dtree ] || { echo "the vmaps are incomplete" >&2; exit 1; }
+fi
+
+if ! any mmaps/*.mmtile; then
+    echo "== mmaps (the longest step)"
+    rm -rf mmaps && mkdir mmaps
+    "$bin/mmaps_generator" --threads "$(nproc)"
+    any mmaps/*.mmtile || { echo "no movement maps made" >&2; exit 1; }
+fi
+du -sh /data/*
