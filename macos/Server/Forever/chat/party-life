@@ -1,0 +1,280 @@
+#!/usr/bin/env python3
+"""Life in a party with bots, which the bots module doesn't give: it sends each party line to one bot
+(the one the player last talked with, for 90 s), and otherwise the bots only speak on an event (loot,
+a level, a quest). So a party of three felt like talking to one quiet person.
+
+Two things, through the same relay as every other line (Claude, the day's budget, style.txt):
+- a chime-in: after a player's party line, CHIME_PCT percent of the time another bot of his party
+  adds its own short take a few seconds later;
+- idle talk: while a player is active in party (a line in the last ACTIVE_MIN minutes) and the party
+  has been quiet for IDLE_MIN to IDLE_MAX minutes, one of its bots says something on its own: what
+  it's doing, the place, the weather, or a question for him.
+
+The bots are those that got the player's party lines or said a party moment to him; each line uses
+the bot's last event for what it knows (zone, level, what it's doing) and its persona and memories
+from the chat program's minds/ files, so it sounds like the same bot. Lines go out the bridge's way
+for a bot's own line ({"bot", "say", "channel": "party"}); the server spaces one bot's lines 8 s apart.
+
+    AI_CHAT_PARTY_LIFE   0: off (default 1)
+    PARTY_CHIME_PCT      default 45
+    PARTY_IDLE_MIN, PARTY_IDLE_MAX, PARTY_ACTIVE_MIN   minutes, default 3, 6, 15
+"""
+
+import glob
+import json
+import os
+import random
+import re
+import sys
+import threading
+import time
+import urllib.request
+
+FOLDER = os.environ.get("BRIDGE_FOLDER") or "/bridge"
+RELAY = "http://127.0.0.1:%s/v1/chat/completions" % (os.environ.get("RELAY_PORT") or "8411")
+MODEL = os.environ.get("AI_CHAT_MODEL") or "claude-haiku-5-5"
+CHIME_PCT = int(os.environ.get("PARTY_CHIME_PCT") or "45")
+IDLE_MIN = float(os.environ.get("PARTY_IDLE_MIN") or "3") * 60
+IDLE_MAX = float(os.environ.get("PARTY_IDLE_MAX") or "6") * 60
+ACTIVE = float(os.environ.get("PARTY_ACTIVE_MIN") or "15") * 60
+# A line that gives the bot away is never said (the chat program has its own, fuller check for its lines).
+GIVEAWAY = re.compile(r"\b(as an ai|an ai\b|language model|chat ?bot|i'?m a bot|i am a bot|assistant|prompt)", re.I)
+
+lock = threading.Lock()
+parties = {}  # player -> {"bots": {name: last event}, "lines": [(who, text)], "player_t", "party_t", "idle_at"}
+asked = {}    # a party line's event id -> (player, bot), to put the bots' answers in the party's lines
+
+
+def log(*parts):
+    print("party-life:", *parts, file=sys.stderr, flush=True)
+
+
+def party(player):
+    return parties.setdefault(player, {"bots": {}, "lines": [], "player_t": 0.0, "party_t": 0.0, "idle_at": 0.0})
+
+
+def persona(bot):
+    try:
+        with open(os.path.join(FOLDER, "minds", bot + ".json"), encoding="utf-8") as f:
+            mind = json.load(f)
+    except (OSError, ValueError):
+        return {}, []
+    return mind.get("persona") or {}, mind.get("memories") or []
+
+
+def system_for(bot, e, player):
+    p, memories = persona(bot)
+    where = e.get("area") or e.get("zone") or "the world"
+    if e.get("zone") and e.get("area") and e["area"] != e["zone"]:
+        where = "%s, %s" % (e["area"], e["zone"])
+    s = ("You are %s, a level %s %s %s playing World of Warcraft Classic, in a party with %s and maybe others, "
+         "at %s. It is %s, the weather is %s.\n" % (bot, e.get("level", "?"), e.get("race", ""), e.get("class", ""), player,
+                                                  where, e.get("time_of_day", "day"), e.get("weather", "clear")))
+    if p:
+        s += "Who you are: %s. How you write: %s.\n" % (p.get("temper_text", ""), p.get("style_text", ""))
+    if e.get("doing"):
+        s += "What you are doing: %s.\n" % e["doing"]
+    if e.get("quest", {}).get("name"):
+        s += "Your quest: %s.\n" % e["quest"]["name"]
+    near = [n.get("name") for n in e.get("near") or [] if n.get("name")]
+    if near:
+        s += "Around you: %s.\n" % ", ".join(near[:6])
+    mine = [m.get("text") for m in memories if m.get("about") == player and m.get("text")][-4:]
+    if mine:
+        s += "What you remember about %s: %s.\n" % (player, "; ".join(mine))
+    s += ("Write ONE line of party chat, the way a real player types: casual, short (under 15 words), no emojis, no "
+          "actions in asterisks, no quotation marks, no name prefix. Never say or hint that you are a bot, a program or an "
+          "AI. Don't invent quests, items or places: only mention what is given here or is plain Classic knowledge.")
+    return s
+
+
+def ask(system, user):
+    body = {"model": MODEL, "max_tokens": 80, "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]}
+    req = urllib.request.Request(RELAY, data=json.dumps(body).encode("utf-8"), headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=20) as r:
+            out = json.load(r)
+    except (OSError, ValueError) as e:  # the budget spent (429), the API down: nothing said
+        log("no line (%s)" % e)
+        return ""
+    text = ((out.get("choices") or [{}])[0].get("message") or {}).get("content", "") or ""
+    if text.strip().startswith("{"):  # a JSON answer after all: its line
+        try:
+            text = str(json.loads(text).get("say", ""))
+        except (ValueError, AttributeError):
+            text = ""
+    text = text.strip().splitlines()[0] if text.strip() else ""
+    text = text.strip().strip('"').strip()
+    if GIVEAWAY.search(text):
+        log("line dropped, it sounded like a program: %s" % text)
+        return ""
+    return text[:200]
+
+
+def say(bot, text, delay_ms):
+    line = json.dumps({"bot": bot, "say": text, "channel": "party", "delay_ms": int(delay_ms)}, ensure_ascii=False)
+    with open(os.path.join(FOLDER, "replies.jsonl"), "a", encoding="utf-8") as f:
+        f.write(line + "\n")
+
+
+def recent(pt):
+    return "\n".join("%s: %s" % (who, text) for who, text in pt["lines"][-6:])
+
+
+def chime(player, line, answered):
+    """Another bot of the party adds its own take on the player's line."""
+    time.sleep(random.uniform(2.0, 4.0))
+    with lock:
+        pt = party(player)
+        others = [b for b, e in pt["bots"].items() if b not in answered and time.time() - e["_seen"] < ACTIVE]
+        if not others:
+            return
+        bot = random.choice(others)
+        e = pt["bots"][bot]
+        talk = recent(pt)
+    text = ask(system_for(bot, e, player),
+               "The party chat so far:\n%s\n%s just said in party: %s\nYou are not the one being answered here; add your own short "
+               "take, a joke or a reaction, without repeating what was said." % (talk, player, line))
+    if text:
+        say(bot, text, random.uniform(2500, 6000))
+        with lock:
+            pt["lines"].append((bot, text))
+            pt["party_t"] = time.time()
+        log("%s [chime-in]: %s" % (bot, text))
+
+
+def idle(player):
+    with lock:
+        pt = party(player)
+        bots = [b for b, e in pt["bots"].items() if time.time() - e["_seen"] < ACTIVE]
+        if not bots:
+            return
+        bot = random.choice(bots)
+        e = pt["bots"][bot]
+        talk = recent(pt)
+    text = ask(system_for(bot, e, player),
+               "The party chat so far:\n%s\nNobody has said anything for a few minutes. Say something natural on your own: about "
+               "what you're doing, this place, the weather, your class, or ask %s something. Don't repeat earlier lines." % (talk or "(nothing yet)", player))
+    if text:
+        say(bot, text, random.uniform(1000, 3000))
+        with lock:
+            pt["lines"].append((bot, text))
+            pt["party_t"] = time.time()
+        log("%s [idle]: %s" % (bot, text))
+
+
+def newest_events():
+    files = sorted(glob.glob(os.path.join(FOLDER, "events-*.jsonl")))
+    return files[-1] if files else None
+
+
+def on_event(e):
+    kind, channel = e.get("type"), e.get("channel")
+    now = time.time()
+    e["_seen"] = now
+    if kind == "chat_in" and channel in ("party", "raid") and not e.get("from_is_bot"):
+        player, text = e.get("from", ""), e.get("text", "")
+        with lock:
+            asked[e.get("id")] = (player, e["bot"])
+            if len(asked) > 500:
+                asked.clear()
+            pt = party(player)
+            pt["bots"][e["bot"]] = e
+            first = not pt["lines"] or pt["lines"][-1] != (player, text)
+            if first:
+                pt["lines"].append((player, text))
+            pt["player_t"] = pt["party_t"] = now
+            pt["idle_at"] = now + random.uniform(IDLE_MIN, IDLE_MAX)
+            del pt["lines"][:-12]
+        # One player line can reach two bots (two events, the same text): the chime-in waits for both.
+        if first and random.randint(1, 100) <= CHIME_PCT:
+            threading.Timer(1.5, lambda: chime(player, text, answered_by(player, text))).start()
+    elif kind == "moment" and channel in ("party", "raid") and e.get("to"):
+        with lock:
+            asked[e.get("id")] = (e["to"], e["bot"])
+            pt = party(e["to"])
+            pt["bots"][e["bot"]] = e
+            pt["party_t"] = now
+            pt["idle_at"] = max(pt["idle_at"], now + random.uniform(IDLE_MIN, IDLE_MAX))
+
+
+def on_reply(r):
+    """The chat program's answer to a party line or moment: part of that party's talk."""
+    with lock:
+        who = asked.get(r.get("reply_to"))
+        if not who or not r.get("say"):
+            return
+        pt = party(who[0])
+        pt["lines"].append((who[1], r["say"]))
+        del pt["lines"][:-12]
+        pt["party_t"] = time.time()
+
+
+class Tail:
+    """New complete lines of a file, from its end when first opened; starts over when the file is replaced."""
+
+    def __init__(self, path=None):
+        self.path, self.offset, self.carry = path, None, b""
+
+    def lines(self, path=None):
+        path = path or self.path
+        if not path:
+            return []
+        try:
+            size = os.path.getsize(path)
+        except OSError:
+            return []
+        if path != self.path or self.offset is None or size < self.offset:
+            fresh_file = self.offset is not None
+            self.path, self.carry = path, b""
+            self.offset = 0 if fresh_file else size
+        try:
+            with open(path, "rb") as f:
+                f.seek(self.offset)
+                data = f.read()
+        except OSError:
+            return []
+        self.offset += len(data)
+        parts = (self.carry + data).split(b"\n")
+        self.carry = parts.pop()
+        out = []
+        for raw in parts:
+            try:
+                out.append(json.loads(raw.decode("utf-8")))
+            except ValueError:
+                pass
+        return out
+
+
+def answered_by(player, text):
+    with lock:
+        return {b for b, e in party(player)["bots"].items() if e.get("text") == text and time.time() - e["_seen"] < 10}
+
+
+def main():
+    if os.environ.get("AI_CHAT_PARTY_LIFE", "1") != "1":
+        return
+    log("on: chime-ins %d%%, idle talk after %d-%d min of quiet" % (CHIME_PCT, IDLE_MIN // 60, IDLE_MAX // 60))
+    # What was said before this started is past: both files are read from their end.
+    events, replies = Tail(), Tail(os.path.join(FOLDER, "replies.jsonl"))
+    while True:
+        for e in events.lines(newest_events()):
+            try:
+                on_event(e)
+            except (KeyError, TypeError):
+                pass
+        for r in replies.lines():
+            on_reply(r)
+        now = time.time()
+        with lock:
+            due = [p for p, pt in parties.items()
+                   if now - pt["player_t"] < ACTIVE and pt["idle_at"] and now >= pt["idle_at"] and now - pt["party_t"] >= IDLE_MIN]
+            for p in due:
+                parties[p]["idle_at"] = now + random.uniform(IDLE_MIN, IDLE_MAX)
+        for p in due:
+            threading.Thread(target=idle, args=(p,), daemon=True).start()
+        time.sleep(0.5)
+
+
+if __name__ == "__main__":
+    main()

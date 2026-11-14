@@ -16,14 +16,16 @@ import re
 import sys
 import time
 import urllib.request
-from xml.sax.saxutils import escape, unescape
+from html import unescape
+from xml.sax.saxutils import escape
 
 import pymysql
 
 OUT = "/bridge/players.json"
 PASSWORD_FILE = os.environ.get("SOAP_PASSWORD_FILE") or "/soap-password"
 EVERY_S = 20
-ZONE = re.compile(r"Map: (.*?), Zone: (.*?)\s*$", re.M)
+# "│ Map: Zephras Isle, Zone: Zephras Isle" offline; online it goes on with ", Area: Thendal Standing Stones".
+ZONE = re.compile(r"Map: ([^,\r\n]+), Zone: ([^,\r\n]+)")
 
 
 def log(*parts):
@@ -51,7 +53,7 @@ def zone_of(name, password):
                                  headers={"Content-Type": "text/xml", "Authorization": "Basic " + auth})
     with urllib.request.urlopen(req, timeout=5) as r:
         m = ZONE.search(unescape(r.read().decode("utf-8", errors="replace")))
-    return (m.group(1), m.group(2)) if m else None
+    return (m.group(1).strip(), m.group(2).strip()) if m else None
 
 
 def main():

@@ -83,7 +83,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf 
 COPY --from=source /src/src/modules/PlayerbotV2/tools/bot_bridge_ollama.py \
      /src/src/modules/PlayerbotV2/tools/bot_bridge_eval.py \
      /src/src/modules/PlayerbotV2/tools/bot_bridge_eval_cases.jsonl /opt/chat/
-COPY chat/claude-relay chat/chat-start chat/bridge-report chat/player-zones /usr/local/bin/
+COPY chat/claude-relay chat/chat-start chat/bridge-report chat/player-zones chat/party-life /usr/local/bin/
 # What the program's copy imports (`chat-start` adds the calls).
 COPY chat/hearthside_gate.py /opt/hearthside/
 ENV PYTHONPATH=/opt/hearthside

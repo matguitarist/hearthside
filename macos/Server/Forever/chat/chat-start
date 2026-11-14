@@ -87,6 +87,8 @@ fi
 
 export RELAY_PORT=8411
 claude-relay &
+# A party that talks: chime-ins and talk of its own when quiet (AI_CHAT_PARTY_LIFE=0: off).
+party-life &
 # While the relay can't answer, the program gives the bots' fixed lines.
 exec python3 -u "$program" /bridge "${args[@]}" \
     --url "http://127.0.0.1:$RELAY_PORT/v1" --model "${AI_CHAT_MODEL:-claude-haiku-5-5}"

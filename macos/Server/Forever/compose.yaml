@@ -73,6 +73,7 @@ services:
       - ./chat/claude-relay:/usr/local/bin/claude-relay:ro
       - ./chat/bridge-report:/usr/local/bin/bridge-report:ro
       - ./chat/player-zones:/usr/local/bin/player-zones:ro
+      - ./chat/party-life:/usr/local/bin/party-life:ro
       - ./chat/hearthside_gate.py:/opt/hearthside/hearthside_gate.py:ro
       - ./storage/bridge:/bridge
       # The SOAP password (`forever-account`), for the players' zones (`player-zones`).
