@@ -245,12 +245,12 @@ const STATES = {up: ["up", "Running"], starting: ["working", "Starting"], busy: 
 const DOING = {start: "Starting", stop: "Stopping", restart: "Restarting", backup: "Backing up", settings: "Applying the settings to"};
 const DONE = {start: "Started", stop: "Stopped", restart: "Restarted", backup: "Backed up", settings: "Applied the settings to"};
 // Each 1.12 continent's world map, as WorldMapArea.dbc bounds it: the y at its left and right
-// edges, the x at its top and bottom (the world's x runs north, its y west). Pandaria's come
-// with its status, read from its own client.
+// edges, the x at its top and bottom (the world's x runs north, its y west). Forever's two
+// continents are these, at the same places; Pandaria's come with its status, read from its own client.
 const CLASSIC_MAPS = [{map: 0, name: "Eastern Kingdoms", file: "azeroth.png", left: 16000, right: -19200, top: 7467, bottom: -16000},
                       {map: 1, name: "Kalimdor", file: "kalimdor.png", left: 17067, right: -19733, top: 12800, bottom: -11733}];
 let shown = null, last, hists = {}, asked = null, timer, session = {signedIn: false, passwordSet: false}, editing = false;
-let shownMaps = {classic: 0, pandaria: 870};
+let shownMaps = {classic: 0, pandaria: 870, forever: 0};
 try { shown = localStorage.getItem("server"); } catch (e) {}
 try { Object.assign(shownMaps, JSON.parse(localStorage.getItem("maps") || "{}")); } catch (e) {}
 const $ = id => document.getElementById(id);
@@ -285,12 +285,12 @@ function spark(id, points, max) {
   svg.innerHTML = `<path class="area" d="${line}L100,40L0,40Z"/><path class="line" d="${line}"/>`;
 }
 
-const missingMaps = () => shown === "classic"
+const missingMaps = () => shown !== "pandaria"
   ? "The map pictures come from your game files: open Settings › Home Server in the launcher once to copy them here."
   : "The map pictures are drawn from the game files on the server, a minute after the launcher next connects.";
 
 function drawMap(g) {
-  const maps = shown === "classic" ? CLASSIC_MAPS : (g.maps || []).map(m => Object.assign({}, m, {file: "pandaria/" + m.file}));
+  const maps = shown !== "pandaria" ? CLASSIC_MAPS : (g.maps || []).map(m => Object.assign({}, m, {file: "pandaria/" + m.file}));
   const tabs = $("tabs");
   if (!maps.length) {
     tabs.innerHTML = "";
@@ -468,9 +468,7 @@ function draw() {
     $("spark-cpu-sub").textContent = `average ${(cpu.reduce((a, b) => a + b, 0) / cpu.length / 100).toFixed(1)} cores, peak ${(Math.max(...cpu) / 100).toFixed(1)}`;
   }
 
-  // Forever's world is its own (new continents): no map of it yet.
-  $("map-card").hidden = shown === "forever";
-  if (shown !== "forever") drawMap(g);
+  drawMap(g);
   // The backups are the Classic server's.
   $("backups-card").hidden = shown !== "classic";
   if (shown === "classic") {

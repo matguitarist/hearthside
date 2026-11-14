@@ -214,7 +214,7 @@ forever() {
         echo '{"state":"missing"}'
         return
     fi
-    local bnet world database state since ip port players="[]" bots=0 nplayers=0 levels="[]" bot="b.email LIKE '%@PLAYERBOT-V2.LOCAL'"
+    local bnet world database state since ip port players="[]" bots=0 nplayers=0 levels="[]" dots="" bot="b.email LIKE '%@PLAYERBOT-V2.LOCAL'"
     bnet=$(health $fp-bnetserver-1) world=$(health $fp-worldserver-1) database=$(health $fp-database-1)
     ip=$(sed -n 's/^LAN_IP=//p' $fd/.env 2>/dev/null || true)
     port=$(sed -n 's/^WORLD_PORT=//p' $fd/.env 2>/dev/null || true)
@@ -234,6 +234,11 @@ forever() {
         local logged
         logged=$(tail -c 200000 $fd/storage/logs/Playerbot.log 2>/dev/null | grep -o 'bots_online=[0-9]*' | tail -n 1 | cut -d= -f2 || true)
         ((${logged:-0} <= bots)) || bots=$logged
+        # Where the bots are, for the dashboard's map: Eastern Kingdoms and Kalimdor, as in 1.12.
+        while IFS=$'\t' read -r map x y level; do
+            [ -n "$map" ] || continue
+            dots+="${dots:+,}[$map,$x,$y,$level]"
+        done < <(fsql "SELECT c.map, ROUND(c.position_x), ROUND(c.position_y), c.level $from AND $bot AND c.map IN (0, 1)")
     fi
 
     local errors="[]" log=$fd/storage/logs/Server.log
@@ -254,7 +259,7 @@ forever() {
     history history-forever.tsv "$nplayers" "$bots" "$c" "$m"
     cat <<EOF
 {"state":"$state","services":{"bnetserver":$(js "$bnet"),"worldserver":$(js "$world"),"database":$(js "$database")},
-"since":$(js "$since"),"players":$players,"bots":$bots,"botLevels":$levels,"botPositions":[],
+"since":$(js "$since"),"players":$players,"bots":$bots,"botLevels":$levels,"botPositions":[${dots}],
 "game":{"cpu":$c,"memory":$m},"databaseMemory":${mem[$fp-database-1]:-0},
 "software":{"FOREVER_REF":$(js "$(sed -n 's/^ARG FOREVER_REF=//p' $fd/Dockerfile 2>/dev/null || true)")},"settings":{${settings}},"errors":$errors}
 EOF
