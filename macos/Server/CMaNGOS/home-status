@@ -245,23 +245,35 @@ forever() {
     [ ! -f $log ] || errors=$(tail -n 2000 $log | grep -v '^AHBot' | tail -n 8 | lines || true)
 
     local settings="" key value
-    # As `forever-start` reads them: BOTS 220 and BOTS_PER_PLAYER 160 when unset, the others 1.
-    for key in BOTS BOTS_PER_PLAYER MAP_THREADS RATE_XP RATE_LOOT RATE_GOLD RATE_REPUTATION RATE_REST; do
+    # As `forever-start` and `chat/chat-start` read them: BOTS 220 and BOTS_PER_PLAYER 160 when
+    # unset, the AI chat off with $0.50 a day, the others 1.
+    for key in BOTS BOTS_PER_PLAYER MAP_THREADS RATE_XP RATE_LOOT RATE_GOLD RATE_REPUTATION RATE_REST \
+        AI_CHAT AI_CHAT_TALK AI_CHAT_DAILY_USD; do
         value=$(sed -n "s/^$key=//p" $fd/.env 2>/dev/null || true)
         case $key in
         BOTS) value=${value:-220} ;;
         BOTS_PER_PLAYER) value=${value:-160} ;;
+        AI_CHAT | AI_CHAT_TALK) value=${value:-0} ;;
+        AI_CHAT_DAILY_USD) value=${value:-0.5} ;;
         *) value=${value:-1} ;;
         esac
         settings+="${settings:+,}$(js "$key"):$(js "$value")"
     done
+    # The bot bridge's report, as the chat container writes it every minute (`bridge-report`), and
+    # whether `.env` holds an API key (never the key).
+    local ai=null report=$fd/storage/bridge/report.json key=false
+    if [ -s $report ] && [ $(($(date +%s) - $(stat -c %Y $report))) -lt 600 ] && head -c 1 $report | grep -q '{'; then
+        ai=$(cat $report)
+    fi
+    ! grep -q '^ANTHROPIC_API_KEY=..' $fd/.env 2>/dev/null || key=true
     local c=${cpu[$fp-worldserver-1]:-0} m=${mem[$fp-worldserver-1]:-0}
     history history-forever.tsv "$nplayers" "$bots" "$c" "$m"
     cat <<EOF
 {"state":"$state","services":{"bnetserver":$(js "$bnet"),"worldserver":$(js "$world"),"database":$(js "$database")},
 "since":$(js "$since"),"players":$players,"bots":$bots,"botLevels":$levels,"botPositions":[${dots}],
 "game":{"cpu":$c,"memory":$m},"databaseMemory":${mem[$fp-database-1]:-0},
-"software":{"FOREVER_REF":$(js "$(sed -n 's/^ARG FOREVER_REF=//p' $fd/Dockerfile 2>/dev/null || true)")},"settings":{${settings}},"errors":$errors}
+"software":{"FOREVER_REF":$(js "$(sed -n 's/^ARG FOREVER_REF=//p' $fd/Dockerfile 2>/dev/null || true)")},"settings":{${settings}},"errors":$errors,
+"ai":$ai,"aiKey":$key}
 EOF
 }
 
@@ -298,9 +310,9 @@ run() {
     "pandaria stop") pstop ;;
     "pandaria restart") cstop && $pd/home-compose up -d database authserver worldserver && $pd/home-compose restart authserver worldserver ;;
     "forever settings") settings forever ;;
-    "forever start") $fd/home-compose up -d database worldserver bnetserver ;;
-    "forever stop") $fd/home-compose stop bnetserver worldserver database ;;
-    "forever restart") $fd/home-compose up -d database && $fd/home-compose up -d --force-recreate worldserver bnetserver ;;
+    "forever start") $fd/home-compose up -d database worldserver bnetserver chat ollama ;;
+    "forever stop") $fd/home-compose stop chat ollama bnetserver worldserver database ;;
+    "forever restart") $fd/home-compose up -d database && $fd/home-compose up -d --force-recreate worldserver bnetserver chat ollama ;;
     *) echo "no such action: $1 $2"; return 2 ;;
     esac
 }
@@ -316,7 +328,7 @@ settings() {
     case $server in
     classic) keys=" BOTS BOTS_NEAR_PLAYERS BOTS_SYNC_LEVEL RATE_XP RATE_LOOT RATE_GOLD RATE_REPUTATION RATE_REST AH_ENABLED AH_PRICES AH_STOCK " ;;
     pandaria) keys=" BOTS BOTS_SYNC_LEVEL MAP_THREADS RATE_XP RATE_LOOT RATE_GOLD RATE_REPUTATION RATE_REST " env=$pd/.env ;;
-    forever) keys=" BOTS BOTS_PER_PLAYER MAP_THREADS RATE_XP RATE_LOOT RATE_GOLD RATE_REPUTATION RATE_REST " env=$fd/.env ;;
+    forever) keys=" BOTS BOTS_PER_PLAYER MAP_THREADS RATE_XP RATE_LOOT RATE_GOLD RATE_REPUTATION RATE_REST AI_CHAT AI_CHAT_TALK AI_CHAT_DAILY_USD " env=$fd/.env ;;
     esac
     [ -f "$file" ] || { echo "no settings asked for"; return 1; }
     while IFS='=' read -r key value; do
@@ -339,7 +351,7 @@ settings() {
         [ "$(docker inspect -f '{{.State.Running}}' $pp-worldserver-1 2>/dev/null)" != true ] || $pd/home-compose up -d database authserver worldserver
     else
         # forever-start reads the settings at each start: a new container for them.
-        [ "$(docker inspect -f '{{.State.Running}}' $fp-worldserver-1 2>/dev/null)" != true ] || $fd/home-compose up -d --force-recreate worldserver
+        [ "$(docker inspect -f '{{.State.Running}}' $fp-worldserver-1 2>/dev/null)" != true ] || { $fd/home-compose up -d --force-recreate worldserver chat && $fd/home-compose up -d ollama; }
     fi
 }
 

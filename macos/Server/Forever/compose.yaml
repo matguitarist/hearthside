@@ -56,6 +56,38 @@ services:
       - ./forever-start:/usr/local/bin/forever-start:ro
       - ./storage/data:/data:ro
       - ./storage/logs:/logs
+      - ./storage/bridge:/bridge
+
+  # The bots' chat through a language model, when `.env` has AI_CHAT=1 (`chat/chat-start`), and the
+  # bot bridge's report for the dashboard. It reads and writes the bridge's files, which the
+  # worldserver shares.
+  chat:
+    image: azeroth-survivors-forever-chat:1
+    build:
+      context: .
+      target: chat
+    restart: unless-stopped
+    env_file: [.env]
+    environment:
+      - TZ=Etc/UTC
+    volumes:
+      - ./chat/chat-start:/usr/local/bin/chat-start:ro
+      - ./chat/claude-relay:/usr/local/bin/claude-relay:ro
+      - ./chat/bridge-report:/usr/local/bin/bridge-report:ro
+      - ./storage/bridge:/bridge
+
+  # A small model on the CPU for the world bots' talk among themselves (AI_CHAT_TALK=1), free where
+  # Claude would charge for every line. Two cores at most, so the world keeps the rest; the model
+  # leaves memory half an hour after the last line.
+  ollama:
+    image: ollama/ollama:0.40.13
+    restart: unless-stopped
+    cpus: 2
+    environment:
+      - OLLAMA_KEEP_ALIVE=30m
+      - OLLAMA_NUM_PARALLEL=1
+    volumes:
+      - ./storage/ollama:/root/.ollama
 
   bnetserver:
     <<: *server

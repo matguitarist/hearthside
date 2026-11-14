@@ -36,7 +36,8 @@ SETTINGS = {
     "pandaria": {"BOTS": (0, 2000, True), "BOTS_SYNC_LEVEL": SWITCH, "MAP_THREADS": (1, 16, True),
                  "RATE_XP": RATE, "RATE_LOOT": RATE, "RATE_GOLD": RATE, "RATE_REPUTATION": RATE, "RATE_REST": RATE},
     "forever": {"BOTS": (0, 2000, True), "BOTS_PER_PLAYER": (0, 500, True), "MAP_THREADS": (1, 16, True),
-                "RATE_XP": RATE, "RATE_LOOT": RATE, "RATE_GOLD": RATE, "RATE_REPUTATION": RATE, "RATE_REST": RATE},
+                "RATE_XP": RATE, "RATE_LOOT": RATE, "RATE_GOLD": RATE, "RATE_REPUTATION": RATE, "RATE_REST": RATE,
+                "AI_CHAT": SWITCH, "AI_CHAT_TALK": (0, 2, True), "AI_CHAT_DAILY_USD": (0.05, 20, False)},
 }
 
 sessions = {}

@@ -8,6 +8,7 @@
 #   ACCEPT_BUILDS   client builds let in besides the realm's own (ForeverCore keeps it on 70707)
 #   LOGIN_DEBUG     1: the login's every connection and request in Bnet.log
 #   BOTS            most world bots at once; RATE_* the usual rates; MAP_THREADS the map threads
+#   AI_CHAT         1: the bots talk through a language model (the chat container; AI_CHAT_* below)
 set -euo pipefail
 etc=/opt/forever/etc
 : "${LAN_IP:?}" "${WORLD_PORT:?}"
@@ -78,6 +79,20 @@ worldserver() {
         echo "[worldserver]"
         echo "Playerbot.World.MaxBots = ${BOTS:-220}"
         [ -z "${BOTS_PER_PLAYER:-}" ] || echo "Playerbot.World.BotsPerPlayer = $BOTS_PER_PLAYER"
+        # The bot bridge, shared with the chat container (`chat/chat-start`): the bots' problems
+        # (stuck, quests dropped, spells refused, death loops) for the dashboard's report, always.
+        # With AI_CHAT=1 the chat program answers there: players' lines to bots and the bots' party
+        # moments go to its model, and a reply may make the bot act (follow, attack, take a
+        # quest...: only what the player could order it). Without it the bots answer as before.
+        # The world bots' talk among themselves goes to it only with AI_CHAT_TALK 1 or 2.
+        echo "Playerbot.Bridge.Enable = 1"
+        echo "Playerbot.Bridge.Folder = \"/bridge\""
+        echo "Playerbot.Bridge.CrashFolder = \"/logs/Crashes\""
+        echo "Playerbot.Bridge.Chat = ${AI_CHAT:-0}"
+        echo "Playerbot.Bridge.Moments = ${AI_CHAT:-0}"
+        echo "Playerbot.Bridge.Talk = $([ "${AI_CHAT:-0}" = 1 ] && [ "${AI_CHAT_TALK:-0}" != 0 ] && echo 1 || echo 0)"
+        echo "Playerbot.Bridge.Actions.Enable = $([ "${AI_CHAT:-0}" = 1 ] && echo "${AI_CHAT_ACTIONS:-1}" || echo 0)"
+        echo "Playerbot.Bridge.Actions.Spells = 1"
     } >"$etc/worldserver.conf.d/zz-z-hearthside.conf"
 
     # The realm as the home server serves it, as the updater's last file: applied before the realm

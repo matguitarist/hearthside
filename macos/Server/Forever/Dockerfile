@@ -73,6 +73,19 @@ RUN mkdir /tdb && cd /tdb \
     && for f in $(sed -n 's/^#define DATABASE_\(FULL\|HOTFIXES\)_DATABASE *"\(.*\)"/\2/p' /tmp/revision_data.h.in.cmake); do \
            [ -f "$f" ] || { echo "the release has no $f" >&2; exit 1; }; done
 
+# The bots' chat (`--target chat`, the compose file's `chat`): the bots module's own chat program, as the
+# pinned commit ships it, talking through the bot bridge's files; and `claude-relay`, which gives it
+# Claude in place of a local Ollama. `chat-start` picks one from `.env` (AI_CHAT, see there).
+FROM python:3.13-slim AS chat
+RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/* \
+    && pip install --no-cache-dir anthropic==2.8.0
+# The chat test set comes along (`bot_bridge_eval.py`, run by the forever-bots skill).
+COPY --from=source /src/src/modules/PlayerbotV2/tools/bot_bridge_ollama.py \
+     /src/src/modules/PlayerbotV2/tools/bot_bridge_eval.py \
+     /src/src/modules/PlayerbotV2/tools/bot_bridge_eval_cases.jsonl /opt/chat/
+COPY chat/claude-relay chat/chat-start chat/bridge-report /usr/local/bin/
+ENTRYPOINT ["/usr/local/bin/chat-start"]
+
 FROM ${UBUNTU}
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
         ca-certificates openssl tzdata mysql-client libmysqlclient21 libssl3t64 libbz2-1.0 libreadline8t64 \

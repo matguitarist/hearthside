@@ -111,6 +111,9 @@ form.settings select, form.settings input[type=number] { font: inherit; font-siz
   border: 1px solid var(--line); background: var(--bg); color: var(--text); width: 110px; }
 form.settings .hint { grid-column: 1 / -1; }
 form.settings .row { grid-column: 1 / -1; display: flex; gap: 8px; justify-content: flex-end; align-items: center; }
+.chatlog { font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--dim); white-space: pre-wrap; overflow-wrap: anywhere; margin: 8px 0 0; }
+.problem { font-size: 13px; margin: 2px 0; overflow-wrap: anywhere; }
+.problem .n { display: inline-block; min-width: 3.2em; color: var(--dim); font-variant-numeric: tabular-nums; }
 </style>
 </head>
 <body>
@@ -200,6 +203,18 @@ form.settings .row { grid-column: 1 / -1; display: flex; gap: 8px; justify-conte
       <div class="sub" id="spark-cpu-sub"></div>
     </section>
 
+    <section class="card half" id="ai-card" hidden>
+      <h2>Bot chat</h2>
+      <div class="big" id="ai-spent">–</div>
+      <div class="sub" id="ai-sub"></div>
+      <pre class="chatlog" id="ai-log"></pre>
+    </section>
+    <section class="card half" id="problems-card" hidden>
+      <h2>Bot problems, last 24 hours</h2>
+      <div id="problems"></div>
+      <div class="sub" id="problems-sub" style="margin-top:6px"></div>
+    </section>
+
     <section class="card half" id="backups-card">
       <h2>Backups <button class="btn small right" id="backup" data-action="backup" hidden>Back up now</button></h2>
       <table><tbody id="backups"></tbody></table>
@@ -237,6 +252,10 @@ const SETTINGS = {
   AH_ENABLED: ["Auction house bot", "switch"],
   AH_PRICES: ["Auction prices", [0.2, 0.35, 0.5, 0.75, 1, 1.5]],
   AH_STOCK: ["Auction stock", [0.25, 0.5, 1, 1.5, 2, 3]],
+  // Forever's bots talking through a language model (`chat/chat-start`).
+  AI_CHAT: ["Bots talk through AI", "switch"],
+  AI_CHAT_TALK: ["Bots' talk with each other", [["0", "written lines"], ["1", "local model"], ["2", "Claude"]]],
+  AI_CHAT_DAILY_USD: ["AI budget a day ($)", [0.1, 0.25, 0.5, 1, 2]],
 };
 const NAMES = {classic: "Classic", pandaria: "Pandaria", forever: "Forever"};
 const SERVERS = Object.keys(NAMES);
@@ -359,6 +378,8 @@ function settingValue(k, v) {
   const kind = SETTINGS[k][1];
   if (kind === "switch") return v === "1" ? "on" : "off";
   if (k.startsWith("RATE_") || k === "AH_PRICES" || k === "AH_STOCK") return "×" + v;
+  if (k === "AI_CHAT_DAILY_USD") return "$" + v;
+  if (Array.isArray(kind) && Array.isArray(kind[0])) return (kind.find(c => c[0] === v) || [v, v])[1];
   return v;
 }
 
@@ -378,6 +399,8 @@ function openEditor() {
     const v = settings[k];
     if (kind === "switch") return `<label>${name}<input type="checkbox" name="${k}" ${v === "1" ? "checked" : ""}></label>`;
     if (kind === "count") return `<label>${name}<input type="number" name="${k}" min="0" max="2000" step="10" value="${esc(v)}" required></label>`;
+    if (Array.isArray(kind[0])) return `<label>${name}<select name="${k}">${kind.map(([c, text]) =>
+      `<option value="${c}" ${c === v ? "selected" : ""}>${esc(text)}</option>`).join("")}</select></label>`;
     const choices = kind.map(String).includes(v) ? kind.map(String) : [v, ...kind.map(String)];
     return `<label>${name}<select name="${k}">${choices.map(c => `<option ${c === v ? "selected" : ""}>${esc(c)}</option>`).join("")}</select></label>`;
   };
@@ -385,6 +408,7 @@ function openEditor() {
   form.innerHTML = Object.entries(SETTINGS).filter(([k]) => settings[k] !== undefined && settings[k] !== "").map(field).join("") +
     (shown !== "classic" ? `<div class="hint note">World threads: how many cores update the continents at once. More helps when bots spread over several continents.</div>` : "") +
     (shown === "forever" ? `<div class="hint note">Forever's bots wake around the players: up to "Bots around each player" near each one, and never more than "Bots" in all.</div>` : "") +
+    (shown === "forever" ? `<div class="hint note">Bots talk through AI: they answer whispers, party and /say through Claude (the API key in the server's .env${g.aiKey ? "" : ", not set yet"}), and may act on what you ask. Their talk with each other costs nothing on the local model; on Claude it would be most of the bill. Past the day's budget they go back to their written lines until midnight UTC.</div>` : "") +
     `<div class="row"><span class="note">${running ? "Saving restarts the server: anyone playing is disconnected for a few minutes." : "Saved for the next start."}</span>
        <button class="btn" type="button" id="edit-cancel">Cancel</button><button class="btn primary">${running ? "Save &amp; restart" : "Save"}</button></div>`;
   $("edit-cancel").addEventListener("click", () => { editing = false; draw(); });
@@ -469,6 +493,7 @@ function draw() {
   }
 
   drawMap(g);
+  drawAi(g);
   // The backups are the Classic server's.
   $("backups-card").hidden = shown !== "classic";
   if (shown === "classic") {
@@ -493,6 +518,30 @@ function draw() {
   $("errors").innerHTML = errors.length ? errors.map(esc).join("\n") : `<span class="ok">${shown === "classic" ? "No errors lately." : "Nothing logged lately."}</span>`;
   $("errors-sub").textContent = shown === "forever" ? "The auction house bot's sales are left out."
     : "The bots' harmless " + (shown === "classic" ? "pathing, cooldown and spell" : "combat") + " messages are left out.";
+}
+
+// Forever's bot bridge: the AI chat's spending and last lines, and the bots' problems
+// (`bridge-report` in the chat container, through `home-status`).
+const PROBLEMS = {stuck: "Stuck on the way", quest_fail: "Quests dropped", spell_fail: "Spells refused", death_loop: "Death loops"};
+function drawAi(g) {
+  const r = shown === "forever" ? g.ai : null;
+  $("ai-card").hidden = $("problems-card").hidden = !r;
+  if (!r) return;
+  const today = r.today || {}, usd = today.usd || 0;
+  $("ai-spent").textContent = r.chat ? `$${usd.toFixed(usd < 0.1 ? 3 : 2)} today` : "Off";
+  const week = (r.days || []).reduce((a, d) => a + d[1], 0);
+  $("ai-sub").textContent = !r.chat ? "The bots answer with their written lines. Turn it on in Settings."
+    : !g.aiKey && !(r.model && !r.model.startsWith("claude")) ? "No API key in the server's .env yet."
+    : `${today.calls || 0} lines by ${r.model} · budget $${r.budget.toFixed(2)} a day · $${week.toFixed(2)} in the last 7 days` +
+      (r.program ? "" : " · the chat program isn't answering");
+  $("ai-log").textContent = (r.recent || []).map(l => l.replace(/^\d\d:\d\d:\d\d /, "")).join("\n");
+  const p = r.problems || {};
+  $("problems").innerHTML = Object.entries(PROBLEMS).map(([k, name]) => {
+    const x = p[k] || {count: 0, top: []};
+    return `<div class="problem"><b>${name}: ${x.count}</b></div>` + x.top.slice(0, 3).map(t =>
+      `<div class="problem" title="${esc(t.detail)}"><span class="n">${t.count}×</span>${esc(t.what)} <span class="note">${t.bots} bot${t.bots === 1 ? "" : "s"}, level ${esc(t.levels)}</span></div>`).join("");
+  }).join("");
+  $("problems-sub").textContent = `${r.lines.chat} player lines and ${r.lines.talk} bot talk lines to the bridge. Ask Claude Code to look into them: "/forever-bots".`;
 }
 
 async function load() {

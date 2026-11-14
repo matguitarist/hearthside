@@ -1,0 +1,183 @@
+#!/usr/bin/env python3
+"""What the bots did and said lately, from the bot bridge's folder: for the dashboard (`--json FILE`,
+written by the chat container every minute) and for reading (`--text`, the forever-bots skill).
+
+- the AI chat: replies and spending per day (claude-usage.json), chat and talk lines in the events,
+  the last conversations from the chat program's log;
+- the bots' problems the server reports: bots stuck on the way somewhere, quests they had to drop,
+  spells the server keeps refusing, deaths in a loop. Grouped by where and what, most frequent first.
+
+    bridge-report --json /bridge/report.json
+    bridge-report --text [--hours 24] [--top 15]
+"""
+
+import argparse
+import collections
+import datetime
+import glob
+import json
+import os
+import re
+import time
+
+FOLDER = os.environ.get("BRIDGE_FOLDER", "/bridge")
+PROBLEMS = ("stuck", "quest_fail", "spell_fail", "death_loop")
+CONVERSATION = re.compile(r"^\d\d:\d\d:\d\d (.+ -> .+|.+ \[(talk|general|trade|raid [a-z_]*)[,\]].*)$")
+
+
+def events(hours):
+    """Every event of the last `hours`, oldest first."""
+    since = time.time() - hours * 3600
+    out = []
+    for path in sorted(glob.glob(os.path.join(FOLDER, "events-*.jsonl"))):
+        if os.path.getmtime(path) < since:
+            continue
+        try:
+            with open(path, encoding="utf-8", errors="replace") as f:
+                for line in f:
+                    try:
+                        e = json.loads(line)
+                    except ValueError:
+                        continue
+                    t = e.get("t", "")
+                    try:
+                        when = datetime.datetime.strptime(t, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=datetime.timezone.utc).timestamp()
+                    except ValueError:
+                        continue
+                    if when >= since:
+                        e["_when"] = when
+                        out.append(e)
+        except OSError:
+            pass
+    return out
+
+
+def where(e):
+    return e.get("zone", "") + (" · " + e["area"] if e.get("area") and e.get("area") != e.get("zone") else "")
+
+
+def problem_key(e):
+    """What makes two reports the same problem."""
+    kind = e.get("type")
+    quest = (e.get("quest") or {}).get("name", "")
+    if kind == "stuck":
+        return where(e)
+    if kind == "quest_fail":
+        return "%s (%s)" % (quest or "a quest", e.get("zone", ""))
+    if kind == "spell_fail":
+        return "%s, reason %s" % (e.get("spell") or e.get("spell_id"), e.get("reason"))
+    return "%s in %s" % (e.get("killer") or "something", where(e))
+
+
+def problems(evs, top):
+    groups = {k: collections.OrderedDict() for k in PROBLEMS}
+    for e in evs:
+        kind = e.get("type")
+        if kind not in groups:
+            continue
+        g = groups[kind].setdefault(problem_key(e), {"what": problem_key(e), "count": 0, "bots": set(), "levels": set(),
+                                                     "classes": set(), "detail": "", "last": 0})
+        g["count"] += 1 + int(e.get("repeats", 0) or 0)
+        g["bots"].add(e.get("bot", ""))
+        g["levels"].add(int(e.get("level", 0) or 0))
+        g["classes"].add(e.get("class", ""))
+        g["detail"] = e.get("detail", "") or g["detail"]
+        g["last"] = max(g["last"], e["_when"])
+    out = {}
+    for kind, gs in groups.items():
+        rows = sorted(gs.values(), key=lambda g: (-g["count"], -g["last"]))
+        out[kind] = {
+            "count": sum(g["count"] for g in rows),
+            "top": [{"what": g["what"], "count": g["count"], "bots": len(g["bots"]),
+                     "levels": "%d-%d" % (min(g["levels"]), max(g["levels"])) if g["levels"] else "",
+                     "classes": sorted(c for c in g["classes"] if c), "detail": g["detail"][:300],
+                     "last": int(g["last"])} for g in rows[:top]],
+        }
+    return out
+
+
+def usage():
+    try:
+        with open(os.path.join(FOLDER, "claude-usage.json"), encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def conversations(count):
+    """The last conversation lines of the chat program's log."""
+    try:
+        with open(os.path.join(FOLDER, "program.log"), "rb") as f:
+            f.seek(max(0, os.path.getsize(f.name) - 200_000))
+            lines = f.read().decode("utf-8", errors="replace").splitlines()
+    except OSError:
+        return []
+    return [l for l in lines if CONVERSATION.match(l)][-count:]
+
+
+def report(hours, top):
+    evs = events(hours)
+    kinds = collections.Counter(e.get("type") for e in evs)
+    days = usage()
+    today = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
+    status = {}
+    try:
+        with open(os.path.join(FOLDER, "status.json"), encoding="utf-8") as f:
+            status = json.load(f)
+    except (OSError, ValueError):
+        pass
+    return {
+        "updated": int(time.time()),
+        "hours": hours,
+        "model": os.environ.get("AI_CHAT_MODEL") or ("claude-haiku-5-5" if os.environ.get("ANTHROPIC_API_KEY") else ""),
+        "chat": os.environ.get("AI_CHAT", "0") == "1",
+        "talk": os.environ.get("AI_CHAT_TALK", "0"),
+        "budget": float(os.environ.get("AI_CHAT_DAILY_USD") or "0.50"),
+        "program": bool(status.get("client_alive")),
+        "today": days.get(today, {"calls": 0, "usd": 0.0}),
+        "days": [[d, days[d].get("usd", 0.0), days[d].get("calls", 0)] for d in sorted(days)[-7:]],
+        "lines": {"chat": kinds.get("chat_in", 0), "moments": kinds.get("moment", 0), "talk": kinds.get("talk", 0)},
+        "problems": problems(evs, top),
+        "recent": conversations(8),
+    }
+
+
+def text(r):
+    out = ["Bot bridge report, last %d hours (%s UTC)" % (r["hours"], datetime.datetime.fromtimestamp(r["updated"], datetime.timezone.utc).strftime("%Y-%m-%d %H:%M")), ""]
+    out.append("AI chat: %s, model %s, talk %s, budget $%.2f a day" % ("on" if r["chat"] else "off", r["model"] or "-", r["talk"], r["budget"]))
+    out.append("Today: %d calls, $%.4f" % (r["today"].get("calls", 0), r["today"].get("usd", 0.0)))
+    for d, usd, calls in r["days"]:
+        out.append("  %s  %5d calls  $%.4f" % (d, calls, usd))
+    out.append("Lines to the bridge: %(chat)d player lines, %(moments)d moments, %(talk)d talk lines" % r["lines"])
+    out.append("")
+    names = {"stuck": "Stuck on the way", "quest_fail": "Quests dropped", "spell_fail": "Spells refused", "death_loop": "Death loops"}
+    for kind in PROBLEMS:
+        p = r["problems"][kind]
+        out.append("%s: %d" % (names[kind], p["count"]))
+        for g in p["top"]:
+            out.append("  %4d× %s  (%d bots, levels %s, %s)" % (g["count"], g["what"], g["bots"], g["levels"], ", ".join(g["classes"])))
+            if g["detail"]:
+                out.append("        %s" % g["detail"])
+        out.append("")
+    out.append("Last conversations:")
+    out += ["  " + l for l in r["recent"]] or ["  none"]
+    return "\n".join(out)
+
+
+if __name__ == "__main__":
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--json", metavar="FILE")
+    ap.add_argument("--text", action="store_true")
+    ap.add_argument("--hours", type=int, default=24)
+    ap.add_argument("--top", type=int, default=5)
+    opts = ap.parse_args()
+    r = report(opts.hours, opts.top)
+    if opts.json:
+        tmp = opts.json + ".new"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(r, f, ensure_ascii=False)
+        os.chmod(tmp, 0o644)
+        os.replace(tmp, opts.json)
+    if opts.text or not opts.json:
+        print(text(r))

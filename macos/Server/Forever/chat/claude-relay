@@ -1,0 +1,263 @@
+#!/usr/bin/env python3
+"""Claude for the bots' chat program, which speaks the OpenAI-style API a local Ollama serves.
+
+A small HTTP server on 127.0.0.1 inside the chat container, answering the two calls the program
+makes: `GET /v1/models` (is the service there?) and `POST /v1/chat/completions` (one bot line, a
+system and a user message, asking for one JSON object). Each line goes to Claude through the
+Anthropic SDK, without thinking and at low effort: a bot's line is a sentence, and it should come
+fast and cheap.
+
+Two more things on the way:
+- the world bots' talk among themselves (a talk line's request starts "The talk so far:" or "Start the
+  talk") goes to TALK_URL instead, a free local model, when one is set: it never stops, and on Claude
+  it would be most of the bill;
+- STYLE_FILE, when there, is added to the instructions of every line Claude writes: how the bots on
+  this realm should sound. It is read again whenever it changes (the forever-bots skill tunes it).
+
+A daily budget (AI_CHAT_DAILY_USD, in dollars, UTC days) stops the calls once spent: the relay then
+answers 429 and the program gives its fixed lines until midnight. What was spent is kept in
+USAGE_FILE, so a restart doesn't reset the day.
+
+    ANTHROPIC_API_KEY    the key (the SDK reads it)
+    AI_CHAT_MODEL        default claude-haiku-5-5
+    AI_CHAT_DAILY_USD    default 0.50
+    RELAY_PORT           default 8411
+    USAGE_FILE           default /bridge/claude-usage.json
+    STYLE_FILE           default /bridge/style.txt
+    TALK_URL, TALK_MODEL an OpenAI-style service for the bots' talk (http://ollama:11434/v1, llama3.2:1b)
+"""
+
+import datetime
+import http.server
+import json
+import os
+import re
+import sys
+import threading
+import urllib.error
+import urllib.request
+
+import anthropic
+
+MODEL = os.environ.get("AI_CHAT_MODEL") or "claude-haiku-5-5"
+DAILY_USD = float(os.environ.get("AI_CHAT_DAILY_USD") or "0.50")
+PORT = int(os.environ.get("RELAY_PORT") or "8411")
+USAGE_FILE = os.environ.get("USAGE_FILE") or "/bridge/claude-usage.json"
+STYLE_FILE = os.environ.get("STYLE_FILE") or "/bridge/style.txt"
+TALK_URL = (os.environ.get("TALK_URL") or "").rstrip("/")
+TALK_MODEL = os.environ.get("TALK_MODEL") or "llama3.2:1b"
+
+# Dollars per million tokens, input and output (Haiku 5.5's are for prompts under 100K, which a bot's
+# line always is). A model not listed is counted at Opus 5.5's price, so the budget errs on the safe side.
+PRICES = {
+    "claude-haiku-5-5": (0.10, 0.50),
+    "claude-sonnet-5-5": (2.00, 10.00),
+    "claude-opus-5-5": (4.00, 20.00),
+}
+PRICE_IN, PRICE_OUT = PRICES.get(MODEL, PRICES["claude-opus-5-5"])
+
+JSON_ONLY = "\n\nReply with the JSON object alone: no code fence, no words before or after it."
+
+client = anthropic.Anthropic(timeout=20.0, max_retries=1)
+lock = threading.Lock()
+
+
+def log(*parts):
+    print("claude-relay:", *parts, file=sys.stderr, flush=True)
+
+
+def today():
+    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
+
+
+def load_usage():
+    try:
+        with open(USAGE_FILE, encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+usage = load_usage()
+warned_day = None
+
+
+def spent_today():
+    return usage.get(today(), {}).get("usd", 0.0)
+
+
+def count(input_tokens, output_tokens):
+    """Adds one call to today's spending and keeps the last 31 days on disk."""
+    day = today()
+    with lock:
+        d = usage.setdefault(day, {"calls": 0, "input": 0, "output": 0, "usd": 0.0})
+        d["calls"] += 1
+        d["input"] += input_tokens
+        d["output"] += output_tokens
+        d["usd"] = round(d["usd"] + (input_tokens * PRICE_IN + output_tokens * PRICE_OUT) / 1e6, 6)
+        for old in sorted(usage)[:-31]:
+            del usage[old]
+        try:
+            tmp = USAGE_FILE + ".new"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(usage, f, indent=1, sort_keys=True)
+            os.replace(tmp, USAGE_FILE)
+        except OSError as e:
+            log("can't write %s: %s" % (USAGE_FILE, e))
+
+
+style_cache = {"mtime": None, "text": ""}
+
+
+def style():
+    """The realm's style notes, or ""."""
+    try:
+        mtime = os.stat(STYLE_FILE).st_mtime
+    except OSError:
+        return ""
+    if mtime != style_cache["mtime"]:
+        try:
+            with open(STYLE_FILE, encoding="utf-8") as f:
+                style_cache["text"] = f.read().strip()
+        except OSError:
+            style_cache["text"] = ""
+        style_cache["mtime"] = mtime
+    return style_cache["text"]
+
+
+def is_talk(body):
+    """A world bot's line in a talk with other bots (or a post in General or Trade)."""
+    users = [m.get("content") for m in body.get("messages") or [] if m.get("role") == "user"]
+    last = users[-1] if users and isinstance(users[-1], str) else ""
+    return last.startswith("The talk so far:") or last.startswith("Start the talk")
+
+
+def forward_talk(body):
+    """The talk line, as it came, to the local model."""
+    body = dict(body, model=TALK_MODEL)
+    req = urllib.request.Request(TALK_URL + "/chat/completions", data=json.dumps(body).encode("utf-8"),
+                                 headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=25) as r:
+            return r.status, json.load(r)
+    except urllib.error.HTTPError as e:
+        try:
+            return e.code, json.load(e)
+        except ValueError:
+            return e.code, {"error": {"message": "talk model: HTTP %d" % e.code}}
+    except (OSError, ValueError) as e:
+        return 502, {"error": {"message": "talk model not reachable: %s" % e}}
+
+
+def ask(body):
+    """One chat completion, OpenAI-style in and out, through Claude. Returns (status, json)."""
+    global warned_day
+    if TALK_URL and is_talk(body):
+        return forward_talk(body)
+    if spent_today() >= DAILY_USD:
+        if warned_day != today():
+            warned_day = today()
+            log("today's budget of $%.2f is spent: fixed lines until midnight UTC" % DAILY_USD)
+        return 429, {"error": {"message": "daily budget spent"}}
+
+    system, messages = [], []
+    for m in body.get("messages") or []:
+        role, content = m.get("role"), m.get("content")
+        if isinstance(content, list):  # OpenAI's content parts: only the text ones exist here
+            content = "".join(p.get("text", "") for p in content if isinstance(p, dict))
+        if not isinstance(content, str) or not content:
+            continue
+        if role == "system":
+            system.append(content)
+        elif role in ("user", "assistant"):
+            messages.append({"role": role, "content": content})
+    if not messages or messages[-1]["role"] != "user":
+        return 400, {"error": {"message": "the last message must be the user's"}}
+    notes = style()
+    if notes:
+        system.append("How the bots on this realm write (the owner's notes; the rules above still come first):\n" + notes)
+    system_text = "\n\n".join(system)
+    if (body.get("response_format") or {}).get("type") == "json_object":
+        system_text += JSON_ONLY
+
+    # The program asks for 160 tokens at most (48 for a raid line), counted for small local models;
+    # Claude's tokens are a bit smaller, so it gets twice that, never less than 200: a JSON answer
+    # cut short is worth nothing. The answer stays short, as the prompt asks.
+    max_tokens = max(200, 2 * int(body.get("max_tokens") or 160))
+    try:
+        response = client.messages.create(
+            model=MODEL,
+            max_tokens=max_tokens,
+            system=system_text,
+            messages=messages,
+            thinking={"type": "disabled"},
+            output_config={"effort": "low"},
+        )
+    except anthropic.AuthenticationError:
+        log("the API key was refused (ANTHROPIC_API_KEY in .env)")
+        return 502, {"error": {"message": "API key refused"}}
+    except anthropic.RateLimitError:
+        log("rate limited by the API")
+        return 429, {"error": {"message": "rate limited"}}
+    except anthropic.APIStatusError as e:
+        log("API error %s: %s" % (e.status_code, e.message))
+        return 502, {"error": {"message": e.message}}
+    except anthropic.APIConnectionError as e:
+        log("can't reach the API: %s" % e)
+        return 502, {"error": {"message": "API not reachable"}}
+
+    count(response.usage.input_tokens, response.usage.output_tokens)
+    if response.stop_reason == "refusal":
+        text = ""  # the program then gives the bot's fixed line
+    else:
+        text = "".join(b.text for b in response.content if b.type == "text").strip()
+        text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text)
+    return 200, {
+        "id": response.id,
+        "object": "chat.completion",
+        "model": MODEL,
+        "choices": [{"index": 0, "message": {"role": "assistant", "content": text},
+                     "finish_reason": "length" if response.stop_reason == "max_tokens" else "stop"}],
+        "usage": {"prompt_tokens": response.usage.input_tokens, "completion_tokens": response.usage.output_tokens},
+    }
+
+
+class Handler(http.server.BaseHTTPRequestHandler):
+    def _send(self, status, data):
+        raw = json.dumps(data).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(raw)))
+        self.end_headers()
+        self.wfile.write(raw)
+
+    def do_GET(self):
+        if self.path.rstrip("/") == "/v1/models":
+            self._send(200, {"object": "list", "data": [{"id": MODEL, "object": "model"}]})
+        else:
+            self._send(404, {"error": {"message": "not found"}})
+
+    def do_POST(self):
+        if self.path.rstrip("/") != "/v1/chat/completions":
+            self._send(404, {"error": {"message": "not found"}})
+            return
+        try:
+            body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
+        except ValueError:
+            self._send(400, {"error": {"message": "not JSON"}})
+            return
+        try:
+            self._send(*ask(body))
+        except Exception as e:  # one bad line must not take the relay down; the bot says its fixed line
+            log("failed: %r" % e)
+            self._send(500, {"error": {"message": "relay error"}})
+
+    def log_message(self, *args):  # one line per call would bury the program's own log
+        pass
+
+
+if __name__ == "__main__":
+    log("%s on 127.0.0.1:%d, $%.2f a day (spent today: $%.4f)%s" % (
+        MODEL, PORT, DAILY_USD, spent_today(), ", talk to %s at %s" % (TALK_MODEL, TALK_URL) if TALK_URL else ""))
+    http.server.ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()
