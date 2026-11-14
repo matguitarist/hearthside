@@ -78,12 +78,15 @@ RUN mkdir /tdb && cd /tdb \
 # Claude in place of a local Ollama. `chat-start` picks one from `.env` (AI_CHAT, see there).
 FROM python:3.13-slim AS chat
 RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/* \
-    && pip install --no-cache-dir anthropic==2.8.0
+    && pip install --no-cache-dir anthropic==2.8.0 pymysql==1.1.1
 # The chat test set comes along (`bot_bridge_eval.py`, run by the forever-bots skill).
 COPY --from=source /src/src/modules/PlayerbotV2/tools/bot_bridge_ollama.py \
      /src/src/modules/PlayerbotV2/tools/bot_bridge_eval.py \
      /src/src/modules/PlayerbotV2/tools/bot_bridge_eval_cases.jsonl /opt/chat/
-COPY chat/claude-relay chat/chat-start chat/bridge-report /usr/local/bin/
+COPY chat/claude-relay chat/chat-start chat/bridge-report chat/player-zones /usr/local/bin/
+# What the program's copy imports (`chat-start` adds the calls).
+COPY chat/hearthside_gate.py /opt/hearthside/
+ENV PYTHONPATH=/opt/hearthside
 ENTRYPOINT ["/usr/local/bin/chat-start"]
 
 FROM ${UBUNTU}

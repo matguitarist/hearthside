@@ -68,13 +68,18 @@ services:
       target: chat
     restart: unless-stopped
     env_file: [.env]
-    environment:
-      - TZ=Etc/UTC
     volumes:
       - ./chat/chat-start:/usr/local/bin/chat-start:ro
       - ./chat/claude-relay:/usr/local/bin/claude-relay:ro
       - ./chat/bridge-report:/usr/local/bin/bridge-report:ro
+      - ./chat/player-zones:/usr/local/bin/player-zones:ro
+      - ./chat/hearthside_gate.py:/opt/hearthside/hearthside_gate.py:ro
       - ./storage/bridge:/bridge
+      # The SOAP password (`forever-account`), for the players' zones (`player-zones`).
+      - ./storage:/hs-storage:ro
+    environment:
+      - TZ=Etc/UTC
+      - SOAP_PASSWORD_FILE=/hs-storage/soap-password
 
   # A small model on the CPU for the world bots' talk among themselves (AI_CHAT_TALK=1), free where
   # Claude would charge for every line. Two cores at most, so the world keeps the rest; the model

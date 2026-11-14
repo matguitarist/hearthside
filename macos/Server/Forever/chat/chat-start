@@ -27,23 +27,43 @@ fi
 args=(--workers "${AI_CHAT_WORKERS:-4}" --log /bridge/program.log)
 [ "${AI_CHAT_ACTIONS:-1}" = 1 ] || args+=(--no-actions)
 
-# AI_CHAT_ADULT=1: this realm's owner allows sexual talk. The program as shipped forbids it in its
-# instructions and drops any line with a sexual word; a copy without those two goes in its place.
-# Slurs, threats and the rest of its checks stay. If upstream's text moved, the copy isn't made and
-# the program runs as shipped.
-program=/opt/chat/bot_bridge_ollama.py
-if [ "${AI_CHAT_ADULT:-0}" = 1 ]; then
-    adult=/tmp/bot_bridge_ollama.py
-    sed -e '/^         r"\\bsex\\b", r"\\bsexy\\b", r"\\bnude", r"\\bporn", r"\\bdick pic", r"\\bboobs?\\b", r"\\bpussy",$/d' \
-        -e 's/no threats, "$/no threats." /' -e '/^              "nothing sexual\.\\n")$/s/.*/              "\\n")/' \
-        -e 's/"Don'"'"'t swear\. No slurs, no threats, nothing sexual\.\\n"/"Don'"'"'t swear. No slurs, no threats.\\n"/' \
-        "$program" >"$adult"
-    if [ "$(diff "$program" "$adult" | grep -c '^<')" = 4 ] && ! grep -q 'nothing sexual\|r"\\bsexy' "$adult"; then
-        program=$adult
-        echo "AI_CHAT_ADULT: sexual talk allowed"
+# The program runs from a copy with our changes, each one checked: if upstream's text moved, that
+# change is left out (and said so) and the rest still apply.
+program=/tmp/bot_bridge_ollama.py
+cp /opt/chat/bot_bridge_ollama.py "$program"
+# `change <name> <diff lines> <sed args...>`: one change to the copy, kept only when its diff has
+# exactly that many lines (removed plus added).
+change() {
+    local name=$1 lines=$2
+    shift 2
+    sed "$@" "$program" >"$program.new"
+    if [ "$(diff "$program" "$program.new" | grep -c '^[<>]')" = "$lines" ]; then
+        mv "$program.new" "$program"
+        echo "$name: on"
     else
-        echo "AI_CHAT_ADULT: the program's text has changed, it runs as shipped" >&2
+        rm -f "$program.new"
+        echo "$name: the program's text has changed, left out" >&2
     fi
+}
+
+# Posts in General and Trade only from bots in a zone where a real player is (`hearthside_gate`,
+# `player-zones`): elsewhere nobody reads them, and on Claude each one costs.
+player-zones &
+change "talk only where players are" 2 \
+    -e 's/^\(                elif kind == "talk":\)$/\1\n                    if not __import__("hearthside_gate").talk_ok(e):\n                        continue/'
+
+# Lines said before the program started (it reads the hour's events from the start) get no answer.
+change "old lines skipped" 2 \
+    -e 's/^\(                if kind == "chat_in":\)$/\1\n                    if not __import__("hearthside_gate").fresh(e):\n                        continue/'
+
+# AI_CHAT_ADULT=1: this realm's owner allows sexual talk. The program as shipped forbids it in its
+# instructions and drops any line with a sexual word; those two go. Slurs, threats and the rest of
+# its checks stay.
+if [ "${AI_CHAT_ADULT:-0}" = 1 ]; then
+    change "sexual talk allowed (AI_CHAT_ADULT)" 7 \
+        -e '/^         r"\\bsex\\b", r"\\bsexy\\b", r"\\bnude", r"\\bporn", r"\\bdick pic", r"\\bboobs?\\b", r"\\bpussy",$/d' \
+        -e 's/no threats, "$/no threats." /' -e '/^              "nothing sexual\.\\n")$/s/.*/              "\\n")/' \
+        -e 's/"Don'"'"'t swear\. No slurs, no threats, nothing sexual\.\\n"/"Don'"'"'t swear. No slurs, no threats.\\n"/'
 fi
 
 if [ -n "${AI_CHAT_URL:-}" ]; then

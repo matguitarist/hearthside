@@ -93,6 +93,13 @@ worldserver() {
         echo "Playerbot.Bridge.Talk = $([ "${AI_CHAT:-0}" = 1 ] && [ "${AI_CHAT_TALK:-0}" != 0 ] && echo 1 || echo 0)"
         echo "Playerbot.Bridge.Actions.Enable = $([ "${AI_CHAT:-0}" = 1 ] && echo "${AI_CHAT_ACTIONS:-1}" || echo 0)"
         echo "Playerbot.Bridge.Actions.Spells = 1"
+        # A livelier party with the model talking: a second bot chimes in on a line said to nobody in
+        # particular 60% of the time (upstream 35), and the bots speak up on their own about loot,
+        # quests, kills and levels twice as often (upstream 1.0). Their cooldowns stay as they are.
+        if [ "${AI_CHAT:-0}" = 1 ]; then
+            echo "Playerbot.ChatModel.SecondReplyChance = ${AI_CHAT_SECOND_REPLY:-60}"
+            echo "Playerbot.Chatter.ChanceScale = ${AI_CHAT_CHATTER:-2}"
+        fi
     } >"$etc/worldserver.conf.d/zz-z-hearthside.conf"
 
     # The realm as the home server serves it, as the updater's last file: applied before the realm

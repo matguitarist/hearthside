@@ -1,0 +1,85 @@
+#!/usr/bin/env python3
+"""Where the real players are, every 20 s, into /bridge/players.json, for `hearthside_gate`: the bots'
+talk among themselves is only worth a model's line where someone hears it.
+
+The names come from the characters database (online, and not one of the bots' accounts); each one's
+zone from the server's own `.pinfo` over SOAP, which is live (the database only has the last save).
+The zone names are the server's, the same the bot bridge writes in its events.
+
+    SOAP_PASSWORD_FILE   the HEARTHSIDE account's password (`forever-account` makes it)
+"""
+
+import base64
+import json
+import os
+import re
+import sys
+import time
+import urllib.request
+from xml.sax.saxutils import escape, unescape
+
+import pymysql
+
+OUT = "/bridge/players.json"
+PASSWORD_FILE = os.environ.get("SOAP_PASSWORD_FILE") or "/soap-password"
+EVERY_S = 20
+ZONE = re.compile(r"Map: (.*?), Zone: (.*?)\s*$", re.M)
+
+
+def log(*parts):
+    print("player-zones:", *parts, file=sys.stderr, flush=True)
+
+
+def online_players():
+    db = pymysql.connect(host="database", user="forever", password="forever", connect_timeout=5)
+    try:
+        with db.cursor() as c:
+            c.execute("SELECT c.name FROM characters.characters c JOIN auth.account a ON a.id = c.account "
+                      "JOIN auth.battlenet_accounts b ON b.id = a.battlenet_account "
+                      "WHERE c.online = 1 AND b.email NOT LIKE '%@PLAYERBOT-V2.LOCAL'")
+            return [r[0] for r in c.fetchall()]
+    finally:
+        db.close()
+
+
+def zone_of(name, password):
+    body = ('<?xml version="1.0" encoding="utf-8"?><SOAP-ENV:Envelope xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/" '
+            'xmlns:ns1="urn:TC"><SOAP-ENV:Body><ns1:executeCommand><command>pinfo %s</command></ns1:executeCommand>'
+            '</SOAP-ENV:Body></SOAP-ENV:Envelope>' % escape(name))
+    auth = base64.b64encode(("HEARTHSIDE:" + password).encode()).decode()
+    req = urllib.request.Request("http://worldserver:7878/", data=body.encode(),
+                                 headers={"Content-Type": "text/xml", "Authorization": "Basic " + auth})
+    with urllib.request.urlopen(req, timeout=5) as r:
+        m = ZONE.search(unescape(r.read().decode("utf-8", errors="replace")))
+    return (m.group(1), m.group(2)) if m else None
+
+
+def main():
+    try:
+        with open(PASSWORD_FILE, encoding="utf-8") as f:
+            password = f.read().strip()
+    except OSError:
+        log("no SOAP password (%s): the bots' talk is not limited to the players' zones" % PASSWORD_FILE)
+        return
+    last_error = None
+    while True:
+        try:
+            players = {}
+            for name in online_players():
+                where = zone_of(name, password)
+                if where:
+                    players[name] = {"map": where[0], "zone": where[1]}
+            tmp = OUT + ".new"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump({"t": int(time.time()), "players": players}, f)
+            os.replace(tmp, OUT)
+            last_error = None
+        except Exception as e:  # the server restarting, the database busy: try again next time
+            if repr(e) != last_error:
+                log("can't read the players' zones: %r" % e)
+                last_error = repr(e)
+        time.sleep(EVERY_S)
+
+
+if __name__ == "__main__":
+    main()
