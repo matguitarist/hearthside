@@ -11,6 +11,7 @@
 #   AI_CHAT_TALK         the world bots' talk among themselves: 0 their written lines, 1 the local
 #                        model (the compose file's `ollama`, AI_CHAT_TALK_MODEL), 2 the chat model
 #   AI_CHAT_ACTIONS      0: the bots only talk, a reply never makes them act
+#   AI_CHAT_ADULT        1: sexual talk allowed (the program forbids it as shipped)
 set -euo pipefail
 
 # The worldserver makes the folder when its bridge starts.
@@ -26,8 +27,27 @@ fi
 args=(--workers "${AI_CHAT_WORKERS:-4}" --log /bridge/program.log)
 [ "${AI_CHAT_ACTIONS:-1}" = 1 ] || args+=(--no-actions)
 
+# AI_CHAT_ADULT=1: this realm's owner allows sexual talk. The program as shipped forbids it in its
+# instructions and drops any line with a sexual word; a copy without those two goes in its place.
+# Slurs, threats and the rest of its checks stay. If upstream's text moved, the copy isn't made and
+# the program runs as shipped.
+program=/opt/chat/bot_bridge_ollama.py
+if [ "${AI_CHAT_ADULT:-0}" = 1 ]; then
+    adult=/tmp/bot_bridge_ollama.py
+    sed -e '/^         r"\\bsex\\b", r"\\bsexy\\b", r"\\bnude", r"\\bporn", r"\\bdick pic", r"\\bboobs?\\b", r"\\bpussy",$/d' \
+        -e 's/no threats, "$/no threats." /' -e '/^              "nothing sexual\.\\n")$/s/.*/              "\\n")/' \
+        -e 's/"Don'"'"'t swear\. No slurs, no threats, nothing sexual\.\\n"/"Don'"'"'t swear. No slurs, no threats.\\n"/' \
+        "$program" >"$adult"
+    if [ "$(diff "$program" "$adult" | grep -c '^<')" = 4 ] && ! grep -q 'nothing sexual\|r"\\bsexy' "$adult"; then
+        program=$adult
+        echo "AI_CHAT_ADULT: sexual talk allowed"
+    else
+        echo "AI_CHAT_ADULT: the program's text has changed, it runs as shipped" >&2
+    fi
+fi
+
 if [ -n "${AI_CHAT_URL:-}" ]; then
-    exec python3 -u /opt/chat/bot_bridge_ollama.py /bridge "${args[@]}" --url "$AI_CHAT_URL" --model "${AI_CHAT_MODEL:-llama3.2:3b}"
+    exec python3 -u "$program" /bridge "${args[@]}" --url "$AI_CHAT_URL" --model "${AI_CHAT_MODEL:-llama3.2:3b}"
 fi
 if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
     echo "AI_CHAT=1 but neither ANTHROPIC_API_KEY nor AI_CHAT_URL is set: fixed lines" >&2
@@ -48,5 +68,5 @@ fi
 export RELAY_PORT=8411
 claude-relay &
 # While the relay can't answer, the program gives the bots' fixed lines.
-exec python3 -u /opt/chat/bot_bridge_ollama.py /bridge "${args[@]}" \
+exec python3 -u "$program" /bridge "${args[@]}" \
     --url "http://127.0.0.1:$RELAY_PORT/v1" --model "${AI_CHAT_MODEL:-claude-haiku-5-5}"
