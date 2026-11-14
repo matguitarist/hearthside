@@ -70,8 +70,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         !Launcher.inSession
     }
 
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        ForeverClient.removeLeftoverAddons()
+    }
+
     /// The local server stops with the launcher, unless Settings keeps it running.
     func applicationWillTerminate(_ notification: Notification) {
+        ForeverClient.removeLeftoverAddons()
         if !UserDefaults.standard.bool(forKey: Prefs.keepServerKey) { LocalServer.shared.stopDetached() }
     }
 }

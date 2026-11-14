@@ -95,7 +95,7 @@ enum HelpTopic: String, CaseIterable, Identifiable {
              .h("In Pandaria"),
              .p("Pandaria gets versions of both written for the 5.4.8 client, installed at each launch under the same setting. Their bot panel makes bots of any class with the server's **.playerbots** commands."),
              .h("In Forever"),
-             .p("Forever gets its own AzerothAdmin, installed at each Play under the same setting: its Bots tab adds companions of your level, fills your group, and sends a random dungeon, and its teleports include Zephras and Forever's other new places. Battle.net's client shares the AddOns folder, so the addon stays hidden on Blizzard's realms.")]
+             .p("Forever gets its own AzerothAdmin, installed at each Play under the same setting: its Bots tab adds companions of your level, fills your group, and sends a random dungeon, and its teleports include Zephras and Forever's other new places. It is in Forever's AddOns folder only while Hearthside's client runs, and taken out when it quits, so Battle.net's client never loads it.")]
         case .homeServer:
             [.p("Runs CMaNGOS with bots on an always-on Linux machine with Docker (an Unraid box, say), managed from the launcher over SSH. Keep it on your home network: forward nothing to it from the internet."),
              .h("Setting it up"),

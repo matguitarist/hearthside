@@ -1,3 +1,4 @@
+import AppKit
 import CryptoKit
 import Foundation
 import Security
@@ -409,7 +410,6 @@ final class ForeverServer: ObservableObject {
                 preparing = "Preparing the client: a copy that signs in to your server…"
                 try await ForeverClient.prepare()
             }
-            ForeverClient.installAddons()
             preparing = "Signing in…"
             try await script("forever-login", [email], stdin: password + "\n")
             return true
@@ -493,22 +493,43 @@ enum ForeverClient {
         return read("keyswap.sources") == "\(digest)  -"
     }
 
-    /// This client's AzerothAdmin (`macos/Server/Forever/addons`), or with the setting off, none: the
-    /// shared "Install AzerothPlus and AzerothAdmin" of Settings › General. Battle.net's client reads
-    /// the same AddOns folder; the addon stays hidden on any realm but the home server's.
+    /// Our addons for this client (`macos/Server/Forever/addons`): AzerothAdmin.
+    static let addonNames = ["AzerothAdmin"]
+
+    /// Our addons, there only while Hearthside's client runs: copied in just before it starts
+    /// (unless the shared "Install AzerothPlus and AzerothAdmin" of Settings › General is off),
+    /// taken out when it quits. Battle.net's client reads the same `Interface/AddOns`, and never
+    /// sees them.
     static func installAddons() {
-        guard let dir,
+        removeAddons()
+        guard UserDefaults.standard.object(forKey: Prefs.installAddonsKey) as? Bool ?? true,
+              let dir,
               let bundled = Bundle.main.url(forResource: "Server", withExtension: nil)?.appendingPathComponent("Forever/addons")
         else { return }
         let fm = FileManager.default
-        let install = UserDefaults.standard.object(forKey: Prefs.installAddonsKey) as? Bool ?? true
         let addons = dir.appendingPathComponent("Interface/AddOns", isDirectory: true)
         try? fm.createDirectory(at: addons, withIntermediateDirectories: true)
-        for name in ["AzerothAdmin"] {
-            let dest = addons.appendingPathComponent(name, isDirectory: true)
-            try? fm.removeItem(at: dest)
-            if install { try? fm.copyItem(at: bundled.appendingPathComponent(name), to: dest) }
+        for name in addonNames {
+            try? fm.copyItem(at: bundled.appendingPathComponent(name), to: addons.appendingPathComponent(name, isDirectory: true))
         }
+    }
+
+    static func removeAddons() {
+        guard let dir else { return }
+        for name in addonNames {
+            try? FileManager.default.removeItem(at: dir.appendingPathComponent("Interface/AddOns/\(name)", isDirectory: true))
+        }
+    }
+
+    /// Hearthside's client is running (`mac-client-setup` gives it this identifier).
+    static var isRunning: Bool {
+        !NSRunningApplication.runningApplications(withBundleIdentifier: "com.hearthside.forever").isEmpty
+    }
+
+    /// Our addons left behind, should the launcher have quit before the game: out, unless our
+    /// client still runs.
+    static func removeLeftoverAddons() {
+        if !isRunning { removeAddons() }
     }
 
     /// `mac-client-setup`: the copy, the login name in /etc/hosts and the login's certificate

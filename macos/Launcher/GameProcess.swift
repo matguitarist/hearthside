@@ -54,6 +54,7 @@ final class GameProcess: ObservableObject {
                 }
                 let address = HomeServer.shared.address
                 try ForeverClient.startRelay(address: address)
+                ForeverClient.installAddons()
                 p.executableURL = binary
                 p.currentDirectoryURL = dir
                 p.arguments = ForeverClient.arguments
@@ -98,11 +99,14 @@ final class GameProcess: ObservableObject {
             // The 5.4.8 and Forever clients log nothing of their window to wait for.
             if !pandaria && !forever { watch(for: Self.stuckAfter) }
         } catch {
+            ForeverClient.removeAddons()
             crash = Crash(message: "The game could not start: \(LocalServer.message(error))", logTail: "")
         }
     }
 
     private func finished(status: Int32, reason: Process.TerminationReason, after seconds: TimeInterval) {
+        // Forever's addons go once its client quits, before Battle.net's can start.
+        ForeverClient.removeAddons()
         running = false
         process = nil
         stuck = false
