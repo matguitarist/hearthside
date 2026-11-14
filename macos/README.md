@@ -203,7 +203,7 @@ signs ad-hoc: the app runs on the Mac that built it, with updates off.
    | `MACOS_ART_KEY` | the passphrase of `macos/art.tar.enc`: Classic's, Pandaria's and Forever's key art (Blizzard's, so not in the repository in the clear), decrypted into `macos/art/` |
 
    To change the art, put the new `classic.heic`, `pandaria.heic` and `forever.heic` (1640×922) in `macos/art/` and
-   re-encrypt with the same key:
+   re-encrypt with the same key (kept on the release Mac in `~/.hearthside-art.key`):
    `tar -C macos/art -cf - classic.heic pandaria.heic forever.heic | openssl enc -aes-256-cbc -pbkdf2 -salt -pass file:<key file> -out macos/art.tar.enc`.
 
    An App Store Connect API key works for notarization instead: set `NOTARY_KEY_P8` (the .p8
