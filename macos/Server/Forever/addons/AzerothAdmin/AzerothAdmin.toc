@@ -1,0 +1,10 @@
+## Interface: 16001
+## Title: Azeroth|cffff7f00Admin|r
+## Notes: A game master window for the home server's Forever realm: levels, gold, cheats, teleports, items, bots. Needs an administrator account (Settings › Forever). /aa to open. Stays off on Blizzard's realms.
+## Author: Hearthside
+## Version: 1.0
+## IconTexture: Interface\Icons\Trade_Engineering
+## AddonCompartmentFunc: AzerothAdmin_OnAddonCompartmentClick
+## SavedVariablesPerCharacter: AzerothAdminDB
+widgets.lua
+admin.lua

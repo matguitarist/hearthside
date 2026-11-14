@@ -409,6 +409,7 @@ final class ForeverServer: ObservableObject {
                 preparing = "Preparing the client: a copy that signs in to your server…"
                 try await ForeverClient.prepare()
             }
+            ForeverClient.installAddons()
             preparing = "Signing in…"
             try await script("forever-login", [email], stdin: password + "\n")
             return true
@@ -490,6 +491,24 @@ enum ForeverClient {
         let digest = hash.finalize().map { String(format: "%02x", $0) }.joined()
         // As `shasum -a 256` prints it, from standard input.
         return read("keyswap.sources") == "\(digest)  -"
+    }
+
+    /// This client's AzerothAdmin (`macos/Server/Forever/addons`), or with the setting off, none: the
+    /// shared "Install AzerothPlus and AzerothAdmin" of Settings › General. Battle.net's client reads
+    /// the same AddOns folder; the addon stays hidden on any realm but the home server's.
+    static func installAddons() {
+        guard let dir,
+              let bundled = Bundle.main.url(forResource: "Server", withExtension: nil)?.appendingPathComponent("Forever/addons")
+        else { return }
+        let fm = FileManager.default
+        let install = UserDefaults.standard.object(forKey: Prefs.installAddonsKey) as? Bool ?? true
+        let addons = dir.appendingPathComponent("Interface/AddOns", isDirectory: true)
+        try? fm.createDirectory(at: addons, withIntermediateDirectories: true)
+        for name in ["AzerothAdmin"] {
+            let dest = addons.appendingPathComponent(name, isDirectory: true)
+            try? fm.removeItem(at: dest)
+            if install { try? fm.copyItem(at: bundled.appendingPathComponent(name), to: dest) }
+        }
     }
 
     /// `mac-client-setup`: the copy, the login name in /etc/hosts and the login's certificate

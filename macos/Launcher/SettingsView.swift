@@ -153,7 +153,7 @@ private struct GeneralSettings: View {
             Section("Classic Addons") {
                 Toggle(isOn: $installAddons) {
                     Text("Install AzerothPlus and AzerothAdmin")
-                    Text("AzerothPlus: a cooldown manager, a damage meter, a swing timer, a personal resource display, centered unit frames, an objectives tracker, a windowed map with its quests, quest markers on the map and minimap, and minimap coordinates (/ap or its minimap button). AzerothAdmin: game master tools for an administrator on your own server (/aa). Pandaria gets its own 5.4.8 versions of both, under the same setting.")
+                    Text("AzerothPlus: a cooldown manager, a damage meter, a swing timer, a personal resource display, centered unit frames, an objectives tracker, a windowed map with its quests, quest markers on the map and minimap, and minimap coordinates (/ap or its minimap button). AzerothAdmin: game master tools for an administrator on your own server (/aa). Pandaria gets its own 5.4.8 versions of both, and Forever its own AzerothAdmin, under the same setting.")
                 }
                 Button("Show AddOns Folder") { reveal(Addons.folder) }
             }
