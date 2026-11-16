@@ -80,17 +80,20 @@ The launcher:
   (`AHBot_`) settings, the stock by scaling every `AhBot.MaxAuctionCount` in `ahbot.conf` from its
   pristine copy as `mangosd` starts, then recreate `mangosd`; bringing bots to players also
   shortens how often they move on (`BOTS_MOVE_MIN`, `BOTS_MOVE_MAX`). The launcher keeps the
-  server's scripts and compose files current on each look. `home-status` writes the state of this
-  server and of the Pandaria one beside it (players, bots by level and where they are, auctions,
+  server's scripts and compose files current on each look. The dashboard (`macos/Server/Dashboard`)
+  is a stack of its own, `hearthside-dashboard`, beside the servers it shows, so it is there
+  whichever are set up and stays when one is removed; the launcher keeps it current on each look
+  as well (`Dashboard.swift`). Its `home-status` writes the state of the Classic, Pandaria and
+  Forever servers (players, bots by level and where they are, auctions,
   CPU and memory, backups, software, settings, the latest real errors)
-  into `storage/dashboard/` every minute from cron, with a day of history, and the `dashboard`
+  into its `storage/site/` every minute from cron, with a day of history, and the `dashboard`
   container (`dashboard.py` on `python:alpine`, the files read-only, no Docker socket or database
   password) serves it with `dashboard.html` at `http://<LAN_IP>:8095` for any browser at home; it
-  stays up while the game is stopped. Anyone at home can look; its Start, Stop, Restart and Back
+  stays up while the servers are stopped. Anyone at home can look; its Start, Stop, Restart and Back
   Up Now buttons and its settings editor need a sign-in, against a PBKDF2 hash in
-  `storage/dashboard-auth/` that Dashboard Password… (Settings › Home Server) sets through
+  `storage/auth/` that Dashboard Password… (Settings › Home Server) sets through
   `home-status password`; with none set, nobody can sign in. Each request is a file named for the
-  server and action in `storage/dashboard-requests/` (settings as `KEY=value` lines, checked by
+  server and action in `storage/requests/` (settings as `KEY=value` lines, checked by
   `dashboard.py` and again by the host against each server's own keys), which the same cron job
   (`home-status tick`, polling for the rest of its minute) carries out within a few seconds, its
   progress in `action.json`; a settings change restarts a running server. Pandaria's settings

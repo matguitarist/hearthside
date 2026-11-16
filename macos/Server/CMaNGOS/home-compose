@@ -4,8 +4,6 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 p=hearthside-vanilla
-# The dashboard's container, named for every server (`compose.lan.yaml`).
-dash=hearthside-server-dashboard
 f=(-p "$p" -f compose.yaml -f compose.lan.yaml)
 d=$PWD
 # The world's port on the host, `WORLD_PORT` in `.env`: 8085, the game's own, unless something
@@ -33,13 +31,13 @@ fi
 # takes for a stop by hand, and starts only what its autostart list names: after an `up`, the
 # containers it names (all, if none) go on that list, the database first with time to open before
 # the others; a `stop` takes the game's off, so a server stopped from the launcher stays stopped,
-# and a `down` all of them. The dashboard stays on through a stop.
+# and a `down` all of them.
 list=/var/lib/docker/unraid-autostart
 if [[ -f $list ]]; then
     case " $* " in
     " up "*)
         named=" $(printf '%s ' "$@" | sed -e 's/^up //' -e 's/-[^ ]* //g') "
-        for c in "database:$p-database 10" "realmd:$p-auth" "mangosd:$p-world" "dashboard:$dash"; do
+        for c in "database:$p-database 10" "realmd:$p-auth" "mangosd:$p-world"; do
             s=${c%%:*}; c=${c#*:}
             [[ $named == "  " || $named == *" $s "* ]] || continue
             grep -q "^${c%% *}\( \|$\)" "$list" || echo "$c" >>"$list"
@@ -49,7 +47,7 @@ if [[ -f $list ]]; then
         sed -i -e "/^$p-database/d" -e "/^$p-auth/d" -e "/^$p-world/d" "$list"
         ;;
     *" down "*)
-        sed -i -e "/^$p-/d" -e "/^$dash\( \|$\)/d" "$list"
+        sed -i "/^$p-/d" "$list"
         ;;
     esac
 fi

@@ -155,8 +155,7 @@ final class HomeServer: ObservableObject {
     /// The game files the map tools read, of the client's Data folder.
     /// The recipe's scripts and compose files the launcher keeps current on the server; the
     /// compose files take effect at the next start or Apply.
-    private static let scripts = ["home-compose", "home-backup", "home-setup", "home-update", "home-status",
-                                  "dashboard.html", "dashboard.py", "compose.yaml", "compose.lan.yaml"]
+    private static let scripts = ["home-compose", "home-backup", "home-setup", "home-update", "compose.yaml", "compose.lan.yaml"]
     private static let mpqs = ["dbc.MPQ", "terrain.MPQ", "model.MPQ", "texture.MPQ", "wmo.MPQ", "patch.MPQ", "patch-2.MPQ"]
 
     private init() {}
@@ -183,7 +182,7 @@ final class HomeServer: ObservableObject {
         if !isBusy { phase = .notConfigured }
     }
 
-    /// The dashboard `home-status` keeps, for any browser on the network.
+    /// The dashboard (`HomeDashboard`), for any browser on the network.
     var dashboard: URL? { address.isEmpty ? nil : URL(string: "http://\(address):8095/") }
 
     /// The address the game dials and the ports bind to.
@@ -245,6 +244,8 @@ final class HomeServer: ObservableObject {
             ? Settings(env: status.filter { $0.key.hasPrefix("env.") }.reduce(into: [:]) { $0[String($1.key.dropFirst(4))] = $1.value })
             : nil
         setUpDone = status["state"] == "done"
+        // The dashboard shows every server: kept current whichever are set up.
+        if status["state"] != "nodocker" { await HomeDashboard.shared.sync() }
         switch status["state"] {
         case "nodocker":
             phase = .noDocker
@@ -467,33 +468,12 @@ final class HomeServer: ObservableObject {
         let scripts = Self.scripts.map { recipe.appendingPathComponent($0).path }
         guard scripts.allSatisfy(FileManager.default.fileExists(atPath:)) else { return }
         try? await rsync(scripts)
-        let out = try? await ssh("\(folder)/home-backup schedule; \(folder)/home-status schedule; "
-                                 + "test -s \(folder)/storage/dashboard/azeroth.png -a -s \(folder)/storage/dashboard/kalimdor.png && echo maps",
-                                 quiet: true)
-        if let out, !out.contains("maps") { await sendWorldMaps() }
+        _ = try? await ssh("\(folder)/home-backup schedule", quiet: true)
     }
 
-    /// The dashboard's password (`home-status password`, the password on standard input), asked
-    /// for before it starts, stops or changes a server; a new one signs everyone out.
+    /// The dashboard's password (`HomeDashboard.setPassword`).
     func setDashboardPassword(_ password: String) async -> String? {
-        do {
-            _ = try await ssh("\(folder)/home-status password", stdin: password)
-            return nil
-        } catch {
-            return LocalServer.message(error)
-        }
-    }
-
-    /// The dashboard's two world maps, drawn by the game binary from this Mac's game files, as no
-    /// map art ships with the app.
-    private func sendWorldMaps() async {
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("world-maps-\(UUID().uuidString)")
-        defer { try? FileManager.default.removeItem(at: dir) }
-        // Without them the page says where they come from; the next refresh tries again.
-        guard (try? await Docker.run(Paths.gameBinary, ["--world-maps", dir.path, Paths.data.path], quiet: true)) != nil,
-              (try? await rsync(["azeroth.png", "kalimdor.png"].map { dir.appendingPathComponent($0).path }, into: "storage/dashboard/")) != nil
-        else { return }
-        _ = try? await ssh("chmod a+r \(folder)/storage/dashboard/*.png", quiet: true)
+        await HomeDashboard.shared.setPassword(password)
     }
 
     private func loadBackups() async {

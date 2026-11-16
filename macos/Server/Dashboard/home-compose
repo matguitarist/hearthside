@@ -1,0 +1,24 @@
+#!/bin/bash
+# `docker compose` for the dashboard's folder on a home server: the server's own, or the docker:cli
+# image's where it has none (Unraid). `home-status` and the launcher run everything through it.
+set -euo pipefail
+cd "$(dirname "$0")"
+p=hearthside-dashboard
+c=hearthside-server-dashboard
+d=$PWD
+if docker compose version >/dev/null 2>&1; then
+    docker compose -p "$p" -f compose.yaml "$@"
+else
+    docker run --rm -i -v /var/run/docker.sock:/var/run/docker.sock -v "$d:$d" -w "$d" docker:29-cli \
+        docker compose -p "$p" -f compose.yaml "$@"
+fi
+
+# Unraid starts after a reboot only what its autostart list names: the dashboard goes on it with an
+# `up`, and off it with a `down`.
+list=/var/lib/docker/unraid-autostart
+if [[ -f $list ]]; then
+    case " $* " in
+    " up "*) grep -q "^$c\( \|$\)" "$list" || echo "$c" >>"$list" ;;
+    *" down "*) sed -i "/^$c\( \|$\)/d" "$list" ;;
+    esac
+fi

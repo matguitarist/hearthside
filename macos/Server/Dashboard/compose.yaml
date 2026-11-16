@@ -1,0 +1,23 @@
+# The home server's dashboard, for any browser at home: the files `home-status` writes every
+# minute, served read-only, and, once signed in, its buttons' and settings' requests
+# (`dashboard.py`). A stack of its own, `hearthside-dashboard`, beside the servers it shows: it
+# stays up while they are stopped, to say so and to start them, and through the removal of any.
+# LAN_IP in `.env`; keep it on the LAN: forward nothing to it from the internet.
+
+services:
+  dashboard:
+    container_name: hearthside-server-dashboard
+    # Its page in Unraid's Docker tab and in Porthole, the server's address filled in.
+    labels:
+      net.unraid.docker.webui: 'http://[IP]:[PORT:8095]/'
+    image: python:3.13-alpine
+    restart: unless-stopped
+    init: true
+    command: ['python3', '/dashboard.py']
+    ports:
+      - ${LAN_IP:?set LAN_IP in .env}:8095:80
+    volumes:
+      - ./dashboard.py:/dashboard.py:ro
+      - ./storage/site:/site:ro
+      - ./storage/requests:/requests
+      - ./storage/auth:/auth
