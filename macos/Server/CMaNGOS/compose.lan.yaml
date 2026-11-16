@@ -28,6 +28,9 @@ services:
   # container is named for them all, not for this stack.
   dashboard:
     container_name: hearthside-server-dashboard
+    # Its page in Unraid's Docker tab and in Porthole, the server's address filled in.
+    labels:
+      net.unraid.docker.webui: 'http://[IP]:[PORT:8095]/'
     image: python:3.13-alpine
     restart: unless-stopped
     init: true
