@@ -154,7 +154,7 @@ pub(crate) fn account_guard(user: &str) -> Result<(), String> {
 
 /// What `.probe-identity` at the project root declares: the account a scripted run from this
 /// checkout logs in as (`WOW_USER=`, `WOW_PASS=`, `WOW_CHAR=`, one per line, gitignored). Also read
-/// by `scripts/probe-identity.sh`.
+/// by `tools/probe-identity.sh`.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) struct DeclaredIdentity {
     pub(crate) user: String,

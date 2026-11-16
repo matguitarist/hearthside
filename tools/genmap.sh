@@ -13,7 +13,7 @@ field() { grep -m1 "^$2" "$1" 2>/dev/null | sed -E "s/^$2[[:space:]]*=[[:space:]
 {
   echo "# benilla — generated map"
   echo
-  echo "> **GENERATED** by \`scripts/genmap.sh\` from the code — do not edit by hand; rerun the script"
+  echo "> **GENERATED** by \`tools/genmap.sh\` from the code — do not edit by hand; rerun the script"
   echo "> when what's built changes. *What-is* only: the *what-changed* is in git. No timestamp —"
   echo "> identical code yields an identical map."
   echo
@@ -101,9 +101,9 @@ field() { grep -m1 "^$2" "$1" 2>/dev/null | sed -E "s/^$2[[:space:]]*=[[:space:]
   echo
 
   # Every script, with the first sentence of its own header.
-  echo "## Scripts (\`scripts/\`)"
+  echo "## Scripts (\`tools/\`)"
   echo
-  for f in scripts/*.py scripts/*.sh; do
+  for f in tools/*.py tools/*.sh; do
     [ -f "$f" ] || continue
     # The summary: the header's first non-empty content after the shebang, comment or docstring
     # markers stripped, joined until its first blank line, cut at a sentence end or ~150 chars.
@@ -116,7 +116,7 @@ field() { grep -m1 "^$2" "$1" 2>/dev/null | sed -E "s/^$2[[:space:]]*=[[:space:]
         if (line ~ /^"""/) exit
         got = 1; out = out (out ? " " : "") line }
       END { print out }' "$f" | sed -E 's/\*\*//g; s/^[A-Za-z0-9_.\/-]+ (—|--) //; s/^([^.]*[.!?])([[:space:]]|$).*/\1/; s/^(.{150}).+/\1…/')
-    echo "- \`${f#scripts/}\` — $summary"
+    echo "- \`${f#tools/}\` — $summary"
   done
   echo
 

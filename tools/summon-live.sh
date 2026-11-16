@@ -7,16 +7,16 @@
 # `.probe-identity`, else WOW_USER/WOW_PASS/WOW_CHAR. WOW_HOST is the server, SUMMON_LIVE_KEEP=1
 # keeps the logs.
 #
-#   SUMMON_USER=… SUMMON_PASS=… SUMMON_CHAR=… scripts/summon-live.sh   # ~90 s, two small windows
+#   SUMMON_USER=… SUMMON_PASS=… SUMMON_CHAR=… tools/summon-live.sh   # ~90 s, two small windows
 set -uo pipefail
 
 root="$(git -C "$PWD" rev-parse --show-toplevel 2>/dev/null || true)"
-[ -n "$root" ] && [ -f "$root/scripts/summon-live.sh" ] || root="$(cd "$(dirname "$0")/.." && pwd)"
+[ -n "$root" ] && [ -f "$root/tools/summon-live.sh" ] || root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root" || exit 1
 echo "summon-live: $root"
 
 # The receiver logs in as this checkout's identity: a login kicks whoever holds the account.
-. "$root/scripts/probe-identity.sh"
+. "$root/tools/probe-identity.sh"
 probe_identity summon-live "$root" || exit 1
 rx_user="$PROBE_USER"; rx_pass="$PROBE_PASS"; rx_char="$PROBE_CHAR"
 

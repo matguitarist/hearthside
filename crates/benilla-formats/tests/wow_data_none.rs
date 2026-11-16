@@ -1,5 +1,5 @@
 //! `WOW_DATA=`, set and empty, means there is no install even where one exists: the spelling
-//! `scripts/gates.sh` runs the engine enforcer under to reach the no-install boot path. Setting it
+//! `tools/gates.sh` runs the engine enforcer under to reach the no-install boot path. Setting it
 //! is process-global, so this test has a file, and so a process, of its own.
 
 #[test]

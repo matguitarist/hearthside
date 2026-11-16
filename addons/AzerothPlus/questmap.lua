@@ -2,7 +2,7 @@
 -- minimap in the quest's color, with an arrow on the minimap's rim toward the nearest spot while
 -- none is in sight; a quest that is done, or has nothing to collect, points to who takes it in. The
 -- map's quest panel unticks the quests to leave out. The places are in questdb.lua, built from a
--- CMaNGOS world database by scripts/questdb.py.
+-- CMaNGOS world database by tools/questdb.py.
 --
 -- Places are world yards on a continent: the shown map's bounds turn them into map spots and the
 -- player's map position back into yards, so the minimap needs no zone of its own.

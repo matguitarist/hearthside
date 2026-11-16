@@ -6,8 +6,8 @@ It reads rustdoc's unresolved-link warnings and fails on a `crate::`, `super::`,
 convention here, not rot (a private module named through its parent, another crate's module
 named with `crate::`, a bare name for an unimported bevy type).
 
-    scripts/doc-links.py            # the gate: exit 1 on any dead-target link
-    scripts/doc-links.py --report   # + the benign counts
+    tools/doc-links.py            # the gate: exit 1 on any dead-target link
+    tools/doc-links.py --report   # + the benign counts
 
 The leaf test is a loose declaration grep: a name declared anywhere counts, since what it catches
 is a deleted item, not a misspelled path.

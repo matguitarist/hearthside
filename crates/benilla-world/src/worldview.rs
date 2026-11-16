@@ -66,7 +66,7 @@ pub fn run(build: BuildId) -> AppExit {
     }
 
     // `WOW_WORLDVIEW_CHECK[=seconds]`, the survey as a gate: it records every distinct fault, runs
-    // for a bounded time, prints the set and exits non-zero if any; `scripts/gates.sh` runs it.
+    // for a bounded time, prints the set and exits non-zero if any; `tools/gates.sh` runs it.
     let check = check_seconds();
     if let Some(secs) = check {
         app.set_error_handler(record_fault);

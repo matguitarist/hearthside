@@ -3,18 +3,18 @@
 **/*.rs.bk
 # Cargo.lock IS committed (this workspace produces binaries).
 
-# The wasm-bindgen build output (`scripts/web-build.sh`) — regenerated
+# The wasm-bindgen build output (`tools/web-build.sh`) — regenerated
 # from `crates/wenilla` + `web/index.html`/`web/wasi_stubs.js` on every build, and the .wasm
 # alone can run tens of MB.
 /web/dist/
 
 # --- Blizzard-owned content: NEVER commit ---
 # The launcher's Classic, Pandaria and Forever key art (`macos/art/*.heic`), Blizzard's: kept on this Mac,
-# put in the app by `scripts/macos-app.sh` when present.
+# put in the app by `tools/macos-app.sh` when present.
 /macos/art/
 # The user's legally-installed 1.12.1 client. Read at runtime; not redistributed.
 /WoW
-# Fetched by scripts/fetch-data.sh (archive.org) — the client's Data folder, not redistributed.
+# Fetched by tools/fetch-data.sh (archive.org) — the client's Data folder, not redistributed.
 /wow-data
 # Cached / extracted assets derived from the user's install.
 /extracted/
@@ -30,7 +30,7 @@
 # is the only thing in the tree that may write it.
 /benilla-config
 
-# The account a scripted run from this checkout logs in as (scripts/probe-identity.sh and the
+# The account a scripted run from this checkout logs in as (tools/probe-identity.sh and the
 # client's account guard read it): WOW_USER=, WOW_PASS=, WOW_CHAR=, one per line. A credential.
 /.probe-identity
 
@@ -45,13 +45,13 @@ trace-*.json
 # Claude Code: settings and skills under .claude/ are each person's own.
 /.claude/
 
-# Python bytecode from the `scripts/` tooling.
+# Python bytecode from the `tools/` tooling.
 __pycache__/
 
 # The vanilla addon corpus the UI engine's real-addon tests read (third-party content): a symlink
 # beside `WoW`, or `BENILLA_ADDON_CORPUS`.
 /wow-addons-vanilla
 
-# The C sysroot for the wasm Lua build — fetched by scripts/web-setup.sh, ~300 MB
+# The C sysroot for the wasm Lua build — fetched by tools/web-setup.sh, ~300 MB
 /tools/wasi-sdk/
 /tools/binaryen/

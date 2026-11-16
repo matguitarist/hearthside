@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Start the client in sound measuring mode: record the mix before and after the output limiter.
 #
-#   scripts/soundprobe.sh [client args…]   # play normally, press F9 when you hear it
-#   scripts/soundprobe.py                  # …then read the capture back
+#   tools/soundprobe.sh [client args…]   # play normally, press F9 when you hear it
+#   tools/soundprobe.py                  # …then read the capture back
 #
 # Builds the `play` profile: a debug build stutters, and a stutter is a missed mix deadline, one of
 # the mechanisms the capture has to tell apart.
@@ -21,7 +21,7 @@ cat <<'BANNER'
       of audio guessing which second you meant; with one I read outward from
       it. Press it every time — several marks is much better than one.
 
-    Then quit the client normally and run:  scripts/soundprobe.py
+    Then quit the client normally and run:  tools/soundprobe.py
   ───────────────────────────────────────────────────────────────────────────
 
 BANNER

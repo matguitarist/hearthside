@@ -642,7 +642,7 @@ fn debug_logout_smoke(
         },
         4 if *state.get() == ClientState::InWorld && player.active && now - *mark > 3.0 => {
             // The suppressor reading catches a character that re-entered unable to move;
-            // `scripts/smoke.sh` fails on anything but `none`. A GM account's logout is instant,
+            // `tools/smoke.sh` fails on anything but `none`. A GM account's logout is instant,
             // not rooted, so it does not exercise the rooted path.
             info!(
                 "logout-smoke: re-entered — {} tiles resident, suppressors: {}, done",

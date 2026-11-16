@@ -16,11 +16,11 @@ Upstream's own map and rules for the client crates are `docs/METHOD.md`, `docs/M
 | `crates/benilla-*` | the client: formats, world, UI, protocol, app |
 | `crates/benilla-app/src/survivors/` | the survivors mode |
 | `crates/warcraft-survivors` | the game binary |
-| `macos/`, `scripts/macos-app.sh` | Hearthside.app: the Swift launcher, Sparkle updates, the signed app (`macos/README.md`) |
+| `macos/`, `tools/macos-app.sh` | Hearthside.app: the Swift launcher, Sparkle updates, the signed app (`macos/README.md`) |
 | `server/` | the servers the launcher runs, bundled as the app's `Resources/Server`: the local Classic server's vmangos-deploy compose file and configs; `CMaNGOS/`, the recipe for CMaNGOS with playerbots, built on the Mac or a home server (`home-setup`, `home-compose`); `Pandaria/` and `Forever/`, the home server's other two |
 | `server/Dashboard/` | the home server's dashboard for every server, its own stack `hearthside-dashboard` (`home-status`, `dashboard.py`, `dashboard.html`); the launcher deploys it (`Dashboard.swift`) |
 | `addons/` | addons the app installs for Classic: `AzerothPlus` (QoL), `AzerothAdmin` (GM window for the local server); Lua 5.0, so they also run on the original client |
-| `scripts/fetch-data.sh` | downloads the 1.12.1 client and extracts its MPQs into `wow-data/Data` |
+| `tools/fetch-data.sh` | downloads the 1.12.1 client and extracts its MPQs into `wow-data/Data` |
 | `third_party/` | vendored Lua 5.1 (`lua-src`) and kira, each with a `BENILLA.md` of its hunks |
 | `.github/workflows/` | `ci.yml` (fmt, clippy, tests), `check.yml` (quick UI/carry regressions), `macos-release.yml` |
 

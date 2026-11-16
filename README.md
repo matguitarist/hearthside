@@ -67,7 +67,7 @@ cd azeroth-survivors-re
 make native    # fetch game data (~5.5 GB download), build and run the game
 ```
 
-`make native` first runs `scripts/fetch-data.sh`, which downloads the WoW 1.12.1 client and
+`make native` first runs `tools/fetch-data.sh`, which downloads the WoW 1.12.1 client and
 extracts its MPQs (re-runnable, skips what's already done), then builds and starts the native
 game. `make build` does the same without starting it. This build is native only; to play in the
 browser, use the original at [wow.aethus.pl](https://wow.aethus.pl/).
@@ -95,7 +95,7 @@ to pause, **1/2/3** to pick a level-up card.
 This repo ships **no Blizzard content** — no art, models, sounds, maps, MPQ contents, or
 FrameXML. The game reads a WoW 1.12.1 client's `Data` folder at runtime, which you supply.
 
-`make fetch-data` (`scripts/fetch-data.sh`) downloads the **English WoW 1.12.1 (build 5875)**
+`make fetch-data` (`tools/fetch-data.sh`) downloads the **English WoW 1.12.1 (build 5875)**
 client from [archive.org](https://archive.org/details/WoW_1.12.1-5875) (~5.5 GB) and extracts the
 MPQs into `wow-data/Data/` (git-ignored, resumable, skipped when already present). Or point at a
 client you already have with `--data` / `WOW_DATA`.
@@ -110,7 +110,7 @@ make fetch-data WOW_DATA_URL=https://your-mirror.example/client.zip
 ```
 
 Or set it permanently by editing the single clearly-marked `DEFAULT_DATA_URL` line at the top of
-`scripts/fetch-data.sh`. Either way the URL must be a direct link to a zip holding the client's
+`tools/fetch-data.sh`. Either way the URL must be a direct link to a zip holding the client's
 `Data/*.MPQ` files.
 
 ## How it's built

@@ -3,14 +3,14 @@
 # updates with. Passwords are read from hidden prompts; the Sparkle key goes from the keychain
 # to GitHub through a temporary file that is deleted at once.
 #
-# usage: scripts/macos-ci-secrets.sh <certificate.p12> [owner/repo]
+# usage: tools/macos-ci-secrets.sh <certificate.p12> [owner/repo]
 set -euo pipefail
 
 P12="${1:?usage: $0 <certificate.p12> [owner/repo]}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REPO="${2:-$(git -C "$ROOT" remote get-url origin | sed -E 's#(git@github.com:|https://github.com/)##; s#\.git$##')}"
 SPARKLE="$(ls -d "$ROOT"/target/macos/sparkle-*/bin 2>/dev/null | tail -1)"
-[ -x "$SPARKLE/generate_keys" ] || { echo "run scripts/macos-app.sh once first (it fetches Sparkle)"; exit 1; }
+[ -x "$SPARKLE/generate_keys" ] || { echo "run tools/macos-app.sh once first (it fetches Sparkle)"; exit 1; }
 
 # The password is checked the way the runner will use it: an import into a throwaway keychain by
 # Apple's own `security` (Homebrew's or Apple's openssl may not read a Keychain Access export).

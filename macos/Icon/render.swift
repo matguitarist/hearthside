@@ -1,5 +1,5 @@
 // Renders an SVG to a square PNG with AppKit's own SVG support (macOS 14+):
-// `render <in.svg> <out.png> <pixels>`. Used by scripts/macos-app.sh for the app icon (globe.svg or ember.svg).
+// `render <in.svg> <out.png> <pixels>`. Used by tools/macos-app.sh for the app icon (globe.svg or ember.svg).
 import AppKit
 
 let args = CommandLine.arguments

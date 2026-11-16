@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # One command from a fresh clone to a playable native build:
 #
-#   ./scripts/setup.sh
+#   ./tools/setup.sh
 #
 #   1. fetch the game data (a WoW 1.12.1 client's Data folder, from archive.org — not committed)
 #   2. build the game (`cargo build --release -p warcraft-survivors`)
@@ -10,7 +10,7 @@
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
-scripts/fetch-data.sh
+tools/fetch-data.sh
 cargo build --release -p warcraft-survivors
 
 echo

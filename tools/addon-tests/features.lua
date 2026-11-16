@@ -1,6 +1,6 @@
 -- AzerothPlus's vendor, tooltip, quest and bot features against a stubbed 1.12 client. Run from
 -- the repository root with Lua 5.1 or later:
---   lua scripts/addon-tests/features.lua addons/AzerothPlus
+--   lua tools/addon-tests/features.lua addons/AzerothPlus
 table.getn = table.getn or function(t) return #t end
 math.mod = math.mod or math.fmod
 local A = arg[1]

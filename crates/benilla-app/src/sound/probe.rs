@@ -1,5 +1,5 @@
 //! Sound measuring mode, `$WOW_SOUND_PROBE`: records a session so a sound report can be read
-//! from numbers. `scripts/soundprobe.sh` starts the client in it; `scripts/soundprobe.py` reads
+//! from numbers. `tools/soundprobe.sh` starts the client in it; `tools/soundprobe.py` reads
 //! the capture back.
 //!
 //! Faults that sound alike through a speaker, and their signatures:
@@ -317,7 +317,7 @@ pub(super) fn tick(
         info!(
             "── sound probe closed ────────────────────────────────────────────\n\
              {marks} marker(s) stamped. Files in {}\n\
-             Read it back with:  scripts/soundprobe.py {}\n\
+             Read it back with:  tools/soundprobe.py {}\n\
              ──────────────────────────────────────────────────────────────────",
             dir.display(),
             dir.display(),

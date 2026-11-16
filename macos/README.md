@@ -20,7 +20,7 @@ The launcher:
   No Blizzard files ship in the app. It reads the archive.org zip's directory over HTTP Range
   requests and fetches each MPQ's own byte range, three at a time (archive.org paces each
   connection), so every file resumes on its own and only a missing or damaged file is fetched
-  again. Each file is checked against `scripts/data-manifest.tsv` (SHA-256). The Dock icon shows
+  again. Each file is checked against `tools/data-manifest.tsv` (SHA-256). The Dock icon shows
   the progress, and a notification says when it's done if the launcher isn't in front. Settings
   can point at an existing 1.12.1 `Data` folder instead.
 - **Edits the game's settings** (graphics with Performance / Balanced / Quality presets, sound):
@@ -144,11 +144,11 @@ The launcher:
   damage meter, a swing timer, a personal resource display, smaller centered unit frames, an "All
   objectives" tracker, a windowed map with the zone's quests, quest markers on the map and minimap
   (`questmap.lua`; its places, `questdb.lua`, come from the CMaNGOS world database through
-  `scripts/questdb-dump.sh` and `scripts/questdb.py`), minimap coordinates and movable buff icons,
+  `tools/questdb-dump.sh` and `tools/questdb.py`), minimap coordinates and movable buff icons,
   quest levels in the log and automatic quest accept and hand-in, vendor prices, health numbers and
-  quest progress in tooltips (`infodb.lua`, from the same dump through `scripts/infodb.py`), grey
+  quest progress in tooltips (`infodb.lua`, from the same dump through `tools/infodb.py`), grey
   selling, auto-repair, a bag search box and a bot party panel (`/ap bots`), each a box on a tab of
-  its options; `scripts/addon-tests/` runs them against a stubbed client. AzerothAdmin sends vmangos GM commands, respelled for CMaNGOS
+  its options; `tools/addon-tests/` runs them against a stubbed client. AzerothAdmin sends vmangos GM commands, respelled for CMaNGOS
   (`AA.CMANGOS`, with its own Bots page), so it needs an administrator account (`gmlevel` 6 on
   vmangos, 3 on CMaNGOS, set per account in Settings › Server; new accounts default to it). The shipped `mangosd.conf` starts a GM as a player (`GM.LoginState = 0`,
   `GM.Visible = 1`, `GM.CheatGod = 0`); `migrateConf` applies that once to older copies
@@ -168,7 +168,7 @@ make app            # → target/macos/Hearthside.app, signed with your Develope
 make release-mac    # also notarize + staple, and write target/macos/dist/{zip,dmg,appcast.xml}
 ```
 
-`scripts/macos-app.sh` holds the details and its environment knobs (`ARCHS="arm64 x86_64"` for a
+`tools/macos-app.sh` holds the details and its environment knobs (`ARCHS="arm64 x86_64"` for a
 universal build, `SIGN_IDENTITY`, `VERSION`, `BUILD`). The build number Sparkle compares comes
 from the version (1.2.3 → 1002003), so it only ever grows with the version, whatever the history. Without a Developer ID certificate it
 signs ad-hoc: the app runs on the Mac that built it, with updates off.
@@ -195,7 +195,7 @@ signs ad-hoc: the app runs on the Mac that built it, with updates off.
    that asks for the passwords in hidden prompts:
 
    ```bash
-   scripts/macos-ci-secrets.sh ~/Desktop/devide.p12
+   tools/macos-ci-secrets.sh ~/Desktop/devide.p12
    ```
 
    | secret | what |

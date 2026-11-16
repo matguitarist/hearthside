@@ -1231,7 +1231,7 @@ pub(super) mod tests {
     }
 
     /// An over-scale mix reads far past full scale in `pre.wav` and under it in `post.wav`. The
-    /// capture stays in the temp dir as a known answer for `scripts/soundprobe.py`.
+    /// capture stays in the temp dir as a known answer for `tools/soundprobe.py`.
     #[test]
     fn the_probe_taps_bracket_the_limiter() {
         use kira::backend::mock::{MockBackend, MockBackendSettings};

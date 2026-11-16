@@ -1,5 +1,5 @@
 //! The dev/player seam and its two instrument groups. Dev may see anything; nothing may depend on
-//! dev. The player build (`cargo build -p benilla --no-default-features` in `scripts/gates.sh`)
+//! dev. The player build (`cargo build -p benilla --no-default-features` in `tools/gates.sh`)
 //! holds the direction: a fact gameplay needs from an instrument goes to [`crate::run_mode`], never
 //! through a `use` from gameplay.
 //!
@@ -9,7 +9,7 @@
 
 use bevy::prelude::*;
 
-/// `WOW_CAPTURE=list`: prints the harness scenario names `scripts/visual.sh` reads, before any
+/// `WOW_CAPTURE=list`: prints the harness scenario names `tools/visual.sh` reads, before any
 /// window or asset setup; nothing in a player build.
 pub(crate) fn print_scenario_names() {
     #[cfg(feature = "dev")]

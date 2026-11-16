@@ -11,7 +11,7 @@ The shape it refuses, per function: `let g = <recorder>.pass_span(&mut P, …)` 
 `.pass_span(&mut P, …)` before `g.end(&mut P)`. Timestamp-only spans (`time_span`) nest fine and
 are not looked at. Lexical, per file, reset at every `fn`: a span never outlives its function.
 
-Usage:  scripts/pass-span-lint.py [path …]      (default: every crates/**/*.rs)
+Usage:  tools/pass-span-lint.py [path …]      (default: every crates/**/*.rs)
 Exit:   0 clean, 1 findings.
 """
 

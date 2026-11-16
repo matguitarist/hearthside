@@ -3,20 +3,20 @@
 #
 # The change set is the fork point against main plus staged, unstaged and untracked files. A path
 # under crates/<dir>/ scopes that package, docs/ and *.md scope nothing, and any other path runs
-# scripts/gates.sh, the workspace-wide chain run at land.
+# tools/gates.sh, the workspace-wide chain run at land.
 # CHECK_FULL=1 goes straight to gates.sh.
 #
-#   scripts/check.sh
+#   tools/check.sh
 set -uo pipefail
 
 # Check the checkout you stand in when it is one of this repo, else this file's (as gates.sh does).
 here="$(cd "$(dirname "$0")/.." && pwd)"
 root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
-[ -n "$root" ] && [ -f "$root/scripts/check.sh" ] || root="$here"
+[ -n "$root" ] && [ -f "$root/tools/check.sh" ] || root="$here"
 cd "$root" || exit 1
 
 if [ "${CHECK_FULL:-}" = "1" ]; then
-    exec "$root/scripts/gates.sh"
+    exec "$root/tools/gates.sh"
 fi
 
 # ── The round's change set ───────────────────────────────────────────────────────────────────────
@@ -45,8 +45,8 @@ EOF
 
 if [ -n "$full_reason" ]; then
     echo "check: '$full_reason' is outside the crate map — the whole workspace could be affected."
-    echo "check: escalating to the full chain: scripts/gates.sh"
-    exec "$root/scripts/gates.sh"
+    echo "check: escalating to the full chain: tools/gates.sh"
+    exec "$root/tools/gates.sh"
 fi
 
 dirlist="$(printf '%s\n' $dirs | sed 's/.*DIR://' | sort -u)"
@@ -82,11 +82,11 @@ while grew:
             scope.add(name); grew = True
 print(" ".join(sorted(scope)))
 PY
-)" || { echo "check: cargo metadata failed — falling back to the full chain"; exec "$root/scripts/gates.sh"; }
+)" || { echo "check: cargo metadata failed — falling back to the full chain"; exec "$root/tools/gates.sh"; }
 
 case "$pkgs" in FULL*)
     echo "check: changed path(s) not in the workspace map (${pkgs#FULL }) — full chain"
-    exec "$root/scripts/gates.sh" ;;
+    exec "$root/tools/gates.sh" ;;
 esac
 
 pflags=""
@@ -120,4 +120,4 @@ if [ -s "$skips" ]; then
 fi
 
 echo "CHECK GREEN (scoped: $pkgs)"
-echo "  (the full chain, scripts/gates.sh, runs once on the tree that lands; a run before it repeats it)"
+echo "  (the full chain, tools/gates.sh, runs once on the tree that lands; a run before it repeats it)"

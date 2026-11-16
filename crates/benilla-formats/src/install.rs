@@ -8,7 +8,7 @@
 //!
 //! `dev` is a default feature here, so every dependent declares `default-features = false` and
 //! re-exports it; otherwise feature unification puts the source-tree path in a player build.
-//! `scripts/gates.sh`'s player build and `tests::a_player_build_carries_no_source_tree_path`
+//! `tools/gates.sh`'s player build and `tests::a_player_build_carries_no_source_tree_path`
 //! catch it.
 
 use std::path::{Path, PathBuf};

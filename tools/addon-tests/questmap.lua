@@ -1,6 +1,6 @@
 -- AzerothPlus's quest markers against a stubbed 1.12 client: a human in Northshire with three
 -- quests, one finished. Run from the repository root with Lua 5.1 or later:
---   lua scripts/addon-tests/questmap.lua addons/AzerothPlus
+--   lua tools/addon-tests/questmap.lua addons/AzerothPlus
 table.getn = table.getn or function(t) return #t end
 string.gfind = string.gfind or string.gmatch
 math.atan2 = math.atan2 or math.atan

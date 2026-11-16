@@ -4,7 +4,7 @@
 //! every processed frame into a lock-free ring, and a writer thread drains it to a float WAV
 //! whose header sizes are patched on every flush, so the file is valid up to a hard exit. The
 //! audio thread never allocates or blocks: an overflow is counted, not waited on. Read a capture
-//! back with `scripts/mixsum.py <path.wav>`.
+//! back with `tools/mixsum.py <path.wav>`.
 
 use bevy::prelude::*;
 use kira::effect::{Effect, EffectBuilder};

@@ -42,7 +42,7 @@ crate of its own or a fork, and benilla opens a piece of itself to such a crate 
   exception: FrameXML and GlueXML run off the player's own patch chain, and `assets/ui` holds
   only benilla's own files.
 - **The install is read-only.** benilla never writes into the WoW folder: no screenshot, log,
-  cache or scratch file. `scripts/smoke.sh` fails a run that leaves the install changed.
+  cache or scratch file. `tools/smoke.sh` fails a run that leaves the install changed.
 - **Local state lives in one folder**, `benilla-config/`, at the repo root in a dev build and
   beside the binary in the player build; every path to it resolves through `crate::local_state`.
   Player settings are CVars persisted as a diff in `benilla-config/config.toml`.
@@ -63,7 +63,7 @@ crate of its own or a fork, and benilla opens a piece of itself to such a crate 
 ## Where things live
 
 - `docs/METHOD.md`, this file: rules and method. Never state, never a log.
-- `docs/MAP.md`: what is built, generated from the code by `scripts/genmap.sh` at every land.
+- `docs/MAP.md`: what is built, generated from the code by `tools/genmap.sh` at every land.
   Read it to orient; never edit or commit it by hand.
 - git: the history. No changelogs, no status docs, no "what we did" narratives.
 - The code: a comment says what the code does and the 1.12 fact behind it, in a line. No
@@ -74,14 +74,14 @@ crate of its own or a fork, and benilla opens a piece of itself to such a crate 
 - **The land gates**: `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets
   -- -D warnings`, `cargo test --workspace`, the doc-link and render-pass lints, the player
   build without the `dev` feature with its own tests, and the engine boot checks, as
-  `scripts/gates.sh`. It runs on the tree that lands, before it lands; it is memoized on the
+  `tools/gates.sh`. It runs on the tree that lands, before it lands; it is memoized on the
   tree. The tests that read the install or the addon corpus skip where the data is absent, and
   the gate prints the count; where the data is, a skip is a failure (`BENILLA_REQUIRE_DATA=1`).
   The workspace tests then run a second time with `WOW_DATA=` (no install), so a test that
   reads the install without opening with `wow_data_or_skip!` fails here and not on a clone.
-- **Per round**: `scripts/check.sh`, scoped to the changed crates and their dependents. Run each
+- **Per round**: `tools/check.sh`, scoped to the changed crates and their dependents. Run each
   gate once per round; `tee` the output to a file and grep the file.
-- **A clean run** is the fourth gate: `scripts/smoke.sh`, a live login and logout against the
+- **A clean run** is the fourth gate: `tools/smoke.sh`, a live login and logout against the
   local server. For wire work the gate is a live run with a trace (`WOW_MOVE_TRACE=<path>`,
   tags filtered), never a capture: capture mode has no network.
 - **Platform seams**: a `cfg(target_os)`, a `[target.'cfg(…)']` dependency, a `#[link]` or an

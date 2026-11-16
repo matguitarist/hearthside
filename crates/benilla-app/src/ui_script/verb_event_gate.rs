@@ -265,7 +265,7 @@ fn every_event_the_reference_fires_from_a_verb_is_fired_by_the_verb_s_module() {
     for pair in table() {
         let (registrars, fires) = verb_module_fires(&src, &pair.verb, &pair.event);
         if registrars.is_empty() {
-            continue; // an unbuilt verb: `scripts/api-coverage.sh`'s queue
+            continue; // an unbuilt verb: `tools/api-coverage.sh`'s queue
         }
         seen += 1;
         if fires || declared.contains(&(pair.verb.as_str(), pair.event.as_str())) {

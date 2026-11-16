@@ -131,7 +131,7 @@ jobs:
           NOTARY_ISSUER: ${{ secrets.NOTARY_ISSUER }}
           SPARKLE_KEY_FILE: ${{ runner.temp }}/sparkle.key
           GH_TOKEN: ${{ github.token }} # renders the release notes' Markdown
-        run: VERSION="${TAG#v}" scripts/macos-app.sh --release
+        run: VERSION="${TAG#v}" tools/macos-app.sh --release
 
       - name: Keep the build (dry run)
         if: env.PUBLISH != 'true'

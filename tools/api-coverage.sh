@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
 # Addon-API coverage: how much of the 1.12.1 client's global surface benilla's UI VM presents.
 #
-#   scripts/api-coverage.sh              # the report
-#   scripts/api-coverage.sh --missing    # + every engine global we do not have
-#   scripts/api-coverage.sh --beyond     # + every global we have that 1.12 does not
+#   tools/api-coverage.sh              # the report
+#   tools/api-coverage.sh --missing    # + every engine global we do not have
+#   tools/api-coverage.sh --beyond     # + every global we have that 1.12 does not
 #
 # The 1.12 side is `reference/1.12-globals.tsv`, the reference client's in-world `_G`
-# (scripts/gen-reference-globals.py); ours is a real `UiScript::new()` dumped through `pairs(_G)`.
+# (tools/gen-reference-globals.py); ours is a real `UiScript::new()` dumped through `pairs(_G)`.
 # Never quote the percentage alone: a missing global is an unbuilt feature or a hole in a shipped
 # one, and a global beyond 1.12 sends a feature-detecting addon down a path we cannot honour.
 set -u
 cd "$(dirname "$0")/.."
 
 REF="reference/1.12-globals.tsv"
-[ -f "$REF" ] || { echo "no $REF — run scripts/gen-reference-globals.py" >&2; exit 1; }
+[ -f "$REF" ] || { echo "no $REF — run tools/gen-reference-globals.py" >&2; exit 1; }
 
 show_missing=0
 show_beyond=0

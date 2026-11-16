@@ -2,8 +2,8 @@
 # Build "Hearthside.app": the game (a player build, `ship` profile) and the Swift launcher
 # that downloads the game data, edits settings and updates itself with Sparkle. See macos/README.md.
 #
-#   scripts/macos-app.sh             build and sign → target/macos/Hearthside.app
-#   scripts/macos-app.sh --release   also notarize, staple, and write the zip, dmg and appcast.xml
+#   tools/macos-app.sh             build and sign → target/macos/Hearthside.app
+#   tools/macos-app.sh --release   also notarize, staple, and write the zip, dmg and appcast.xml
 #
 # Environment (all optional):
 #   SIGN_IDENTITY   codesign identity; default the keychain's first "Developer ID Application",
@@ -109,7 +109,7 @@ lipo -create "${games[@]}" -output "$APP/Contents/MacOS/warcraft-survivors"
 ditto "$SPARKLE/Sparkle.framework" "$APP/Contents/Frameworks/Sparkle.framework"
 rm -rf "$APP/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices" \
        "$APP/Contents/Frameworks/Sparkle.framework/XPCServices"
-cp scripts/data-manifest.tsv "$APP/Contents/Resources/"
+cp tools/data-manifest.tsv "$APP/Contents/Resources/"
 # Classic on this Mac: the compose file and server configs `LocalServer.swift` installs.
 ditto server "$APP/Contents/Resources/Server"
 # Python's byte-code caches, should a script have been run from the repo.

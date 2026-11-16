@@ -144,7 +144,7 @@ fn drive_cover(
     mut was: Local<Option<Phase>>,
 ) {
     fade.tick(time.delta_secs());
-    // One line per edge, for a timeline (`scripts/cine.sh`).
+    // One line per edge, for a timeline (`tools/cine.sh`).
     if *was != Some(fade.phase) {
         match fade.phase {
             Phase::Out => info!("screen fade: out"),

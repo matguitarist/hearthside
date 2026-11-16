@@ -3,16 +3,16 @@
 #
 # Needs a server and opens a window for about a minute; gates.sh points at it but does not run it.
 # Logs in as the checkout's `.probe-identity`, else the shell's WOW_USER/WOW_PASS/WOW_CHAR
-# (scripts/probe-identity.sh). WOW_HOST is the server (default localhost), WOW_DATA the install
+# (tools/probe-identity.sh). WOW_HOST is the server (default localhost), WOW_DATA the install
 # watched for writes (default the tree's WoW link), WOW_BG passes through to the client, and
 # WOW_SMOKE_KEEP=1 keeps the logs.
 #
-#   scripts/smoke.sh
+#   tools/smoke.sh
 set -uo pipefail
 
 # Test $PWD's checkout when it is one of this repo, else this file's (the same rule as gates.sh).
 root="$(git -C "$PWD" rev-parse --show-toplevel 2>/dev/null || true)"
-if [ -z "$root" ] || [ ! -f "$root/scripts/smoke.sh" ]; then
+if [ -z "$root" ] || [ ! -f "$root/tools/smoke.sh" ]; then
     root="$(cd "$(dirname "$0")/.." && pwd)"
 fi
 cd "$root" || exit 1
@@ -20,7 +20,7 @@ echo "smoke: $root"
 
 # Resolve the account first, then unset every inherited WOW_* the case below does not keep, so
 # each leg runs on the switches it names; WOW_BG is kept because it only changes window stacking.
-. "$root/scripts/probe-identity.sh"
+. "$root/tools/probe-identity.sh"
 probe_identity smoke "$root" || exit 1
 user="$PROBE_USER"
 pass="$PROBE_PASS"

@@ -2,7 +2,7 @@
 //! has (`reference/1.12-globals.tsv`) or a commented entry on [`BEYOND_1_12`], since addons branch
 //! on a global's presence; no prefix excuses an engine name, as a host seam belongs in Rust. The
 //! production load, core and layer, is `benilla-app`'s `ui_script::surface_gate`; what 1.12 has
-//! and benilla lacks is `scripts/api-coverage.sh`'s count.
+//! and benilla lacks is `tools/api-coverage.sh`'s count.
 
 use std::collections::HashSet;
 
@@ -23,7 +23,7 @@ fn reference() -> HashSet<String> {
         "/../../reference/1.12-globals.tsv"
     );
     let text = std::fs::read_to_string(path).unwrap_or_else(|e| {
-        panic!("reading {path}: {e} — regenerate with scripts/gen-reference-globals.py")
+        panic!("reading {path}: {e} — regenerate with tools/gen-reference-globals.py")
     });
     let names: HashSet<String> = text
         .lines()

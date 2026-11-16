@@ -6,10 +6,10 @@ with a bar, and a `spans` report naming every silent stretch and every onset/off
 is a silent span with a start and an end, and a linear fade-to-zero is a straight line in dBFS, a
 cut a cliff, a crossfade an overlap. `--json` for a machine, the default for a session log.
 
-    scripts/mixsum.py entry.wav                  # 250 ms windows, the envelope + the spans
-    scripts/mixsum.py entry.wav --window 0.1     # finer, for a click or a declick ramp
-    scripts/mixsum.py entry.wav --from 2 --to 12 # just the covered window
-    scripts/mixsum.py entry.wav --quiet          # the spans only, no per-window rows
+    tools/mixsum.py entry.wav                  # 250 ms windows, the envelope + the spans
+    tools/mixsum.py entry.wav --window 0.1     # finer, for a click or a declick ramp
+    tools/mixsum.py entry.wav --from 2 --to 12 # just the covered window
+    tools/mixsum.py entry.wav --quiet          # the spans only, no per-window rows
 
 Pure stdlib, so it runs without installing anything. Python's `wave` module refuses format 3
 (IEEE float), so the tap's 44-byte header is parsed directly; it must match

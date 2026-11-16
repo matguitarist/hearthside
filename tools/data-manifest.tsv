@@ -1,5 +1,5 @@
 # The WoW 1.12.1 (build 5875, enUS) MPQs the game reads: name, size in bytes, SHA-256.
-# Checked by scripts/fetch-data.sh and the macOS launcher after every download.
+# Checked by tools/fetch-data.sh and the macOS launcher after every download.
 backup.MPQ	6341628	5f95175d6046827bbd46ec207a78032a9279fbcf4163c308fb73655f537ff26a
 base.MPQ	11202638	8664981b6ae6f43ad2c2a3670e7b92fb6765da200b427a7e57e03c5cb5645241
 dbc.MPQ	3875834	a37649169842347ae37a270f49b005a95e184f5ba3d2c1d2d16f37ea2bb902e4

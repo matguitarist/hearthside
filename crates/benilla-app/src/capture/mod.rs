@@ -1,6 +1,6 @@
 //! Deterministic capture mode: with `$WOW_CAPTURE=<scenario>` the app boots server-less, pins the
 //! game clock and the camera to a named viewpoint, waits for the rendered image to stop changing,
-//! writes one PNG of the primary window to `$WOW_CAPTURE_OUT` and exits. `scripts/visual.sh`
+//! writes one PNG of the primary window to `$WOW_CAPTURE_OUT` and exits. `tools/visual.sh`
 //! drives it and `benilla-visual` diffs the shots against baselines.
 //!
 //! Captures are rendered game art: they live under the gitignored `target/visual/`.
@@ -230,7 +230,7 @@ pub(crate) const FXVIEW_POS: [f32; 3] = [-8960.0, -145.0, 90.0];
 /// camera pivot, so a `.go xyz` off the debug panel frames what a player there saw.
 const VISTA_EYE_HEIGHT: f32 = 2.0;
 
-/// Print the baseline scenario names, one per line, for `WOW_CAPTURE=list`; `scripts/visual.sh`
+/// Print the baseline scenario names, one per line, for `WOW_CAPTURE=list`; `tools/visual.sh`
 /// reads its sweep from this. On-demand fixtures are not listed.
 pub(crate) fn print_scenario_names() {
     for s in SCENARIOS {
@@ -1017,7 +1017,7 @@ fn drive_capture(
         Phase::Done(n) => {
             if n + 1 >= EXIT_GRACE_FRAMES {
                 // Exit on what is on disk: a save that timed out without a file is a failed
-                // capture, so `scripts/visual.sh`'s `set -e` stops the sweep at it.
+                // capture, so `tools/visual.sh`'s `set -e` stops the sweep at it.
                 if Path::new(&ctx.out).is_file() {
                     info!("capture: saved {}, exiting", ctx.out);
                     exit.write(AppExit::Success);

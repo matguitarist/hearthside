@@ -48,7 +48,7 @@ builds on. What a crate cannot reach stays a fork's.
 
 ## How a change is judged
 
-1. `scripts/gates.sh` is green: fmt, clippy with warnings denied, the workspace tests (once
+1. `tools/gates.sh` is green: fmt, clippy with warnings denied, the workspace tests (once
    with the client data, once without, so a test that reads the install has to declare it), the
    doc-link and render-pass lints, the player build with its own tests, and the engine boot
    checks. A pull request from a fork runs the ones that need neither the install nor a display
@@ -82,14 +82,14 @@ out of scope is closed with the reason.
 - **Without the install, green is hollow.** Well over a thousand tests read the install and skip
   when it is absent, and a few dozen more read a corpus of vanilla addons
   (`BENILLA_ADDON_CORPUS=<a folder of addons>`, or a `wow-addons-vanilla` link at the root),
-  third-party content that is not in this repo. `scripts/gates.sh` and `scripts/check.sh` print
+  third-party content that is not in this repo. `tools/gates.sh` and `tools/check.sh` print
   how many tests skipped and why. Where the data is, `BENILLA_REQUIRE_DATA=1` turns a skip into a
   failure, and the gates set it themselves when the install and the corpus both resolve.
 - **A server to test against.** Any 1.12.1 server; `WOW_HOST` names it (default
   `localhost:3724`). A scripted run has no default account: `WOW_USER`, `WOW_PASS` and
   `WOW_CHAR` name a test account on your server whose login kicks nobody, all three, either in
   the environment or in a `.probe-identity` file at the repo root (one per line, never
-  committed), and `scripts/smoke.sh` (the live login gate) refuses without them. `WOW_CHAR`
+  committed), and `tools/smoke.sh` (the live login gate) refuses without them. `WOW_CHAR`
   must already be on the account, since the client creates a character only when asked:
   `WOW_PROBE_CHARCREATE=<name> WOW_PROBE_CHARCREATE_KEEP=1`, run without `WOW_CHAR`, makes it.
   The probes drive the body with GM commands, so give that account the top GM level.
@@ -106,11 +106,11 @@ out of scope is closed with the reason.
     `WOW_GOD=off` leaves it off.
   - A trace is `WOW_MOVE_TRACE=<file>`, filtered with `WOW_MOVE_TRACE_TAGS` (`"move,snd,in"`) and
     ended by `WOW_PROBE_EXIT_AT=<seconds>`; grep it for the `rly` and `snd` lines.
-  - A capture runs through `scripts/visual.sh`, whose recipe is the header of
+  - A capture runs through `tools/visual.sh`, whose recipe is the header of
     `crates/benilla-app/src/capture/mod.rs`. Pixel questions go through `benilla-visual crop`,
     `series` and `hotspot`.
-- **The loop.** `cargo play` builds and runs the play profile. `scripts/check.sh` verifies a
-  round of work; `scripts/gates.sh` is the full chain, and it opens a window for the engine boot
+- **The loop.** `cargo play` builds and runs the play profile. `tools/check.sh` verifies a
+  round of work; `tools/gates.sh` is the full chain, and it opens a window for the engine boot
   checks, so it needs a display. `WOW_STOCK_UI=1` boots a dev build on the stock interface
   alone, without benilla's layer. Work on a branch.
 

@@ -287,7 +287,7 @@ struct ProbeLua {
 }
 
 /// Whether this entry's chunk is due. The first fire is run-relative (`WOW_PROBE_LUA_AT`, which
-/// `scripts/summon-live.sh` relies on); a later entry settles from when it became ready.
+/// `tools/summon-live.sh` relies on); a later entry settles from when it became ready.
 fn probe_lua_due(probe: &ProbeLua, now: f32) -> bool {
     if probe.fired >= probe.entries {
         return false; // fired already, or no entry yet

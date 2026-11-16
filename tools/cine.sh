@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Play one cinematic on the probe and print what happened, as a timeline.
 #
-#   scripts/cine.sh                 # the human intro (81), parked in Stormwind
-#   scripts/cine.sh 41              # the dwarf intro
-#   scripts/cine.sh 81 --key W      # …and hold W mid-shot: does the body move?
-#   scripts/cine.sh 81 --at "-8913,554,94,0"
-#   scripts/cine.sh 81 --keep       # keep the raw log and trace paths, printed at the end
+#   tools/cine.sh                 # the human intro (81), parked in Stormwind
+#   tools/cine.sh 41              # the dwarf intro
+#   tools/cine.sh 81 --key W      # …and hold W mid-shot: does the body move?
+#   tools/cine.sh 81 --at "-8913,554,94,0"
+#   tools/cine.sh 81 --keep       # keep the raw log and trace paths, printed at the end
 #
 # Logs in as `.probe-identity`, else WOW_USER/WOW_PASS/WOW_CHAR. The body parks on flat ground
 # first, and did-it-fall/did-it-move print beside the timeline: a wedged or falling body sends no
@@ -28,7 +28,7 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-. "$PWD/scripts/probe-identity.sh"
+. "$PWD/tools/probe-identity.sh"
 probe_identity cine.sh "$PWD" || exit 2
 char="$PROBE_CHAR"
 

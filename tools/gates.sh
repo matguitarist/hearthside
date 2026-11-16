@@ -10,14 +10,14 @@
 # `.github/workflows/ci.yml` runs the gates that need neither the install nor a display on a fork's
 # pull request: a gate added here goes there too, if it can run on a bare Linux runner.
 #
-#   scripts/gates.sh
+#   tools/gates.sh
 set -uo pipefail
 
 # Gate the checkout $PWD is in, not this file's: a caller in one worktree may run another's copy
 # by absolute path. Outside a checkout of this repo, gate this file's own checkout.
 here="$(cd "$(dirname "$0")/.." && pwd)"
 root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
-[ -n "$root" ] && [ -f "$root/scripts/gates.sh" ] || root="$here"
+[ -n "$root" ] && [ -f "$root/tools/gates.sh" ] || root="$here"
 cd "$root" || exit 1
 echo "gating: $root"
 
@@ -38,7 +38,7 @@ tree_key() {
     rm -f "$tmpidx"
     [ -n "$t" ] || return 1
     printf '%s|%s|%s' "$t" "$(rustc -V 2>/dev/null)" \
-        "$(shasum "$root/scripts/gates.sh" 2>/dev/null | cut -d' ' -f1)"
+        "$(shasum "$root/tools/gates.sh" 2>/dev/null | cut -d' ' -f1)"
 }
 resolve_wow() { cargo run -q -p benilla-formats --example where 2>/dev/null || true; }
 # A delta only under docs/ or in top-level *.md files keeps the stamped verdict, since no gate
@@ -61,7 +61,7 @@ if [ "${GATES_FORCE:-}" != "1" ] && [ -n "$key_start" ] && [ -f "$stamp" ]; then
         echo "ALL GATES GREEN (memoized — $memo; GATES_FORCE=1 re-runs)"
         [ -d target ] && printf '%s\t%s\t%s\t%s\t%s\n' "$(date -u +%FT%TZ)" \
             "$(git rev-parse --short HEAD 2>/dev/null || echo '-')" chain 0 memo >>target/.gates-timing 2>/dev/null
-        echo "  (a clean run is the fourth gate: scripts/smoke.sh — live logout/re-login round trip)"
+        echo "  (a clean run is the fourth gate: tools/smoke.sh — live logout/re-login round trip)"
         exit 0
     fi
 fi
@@ -129,11 +129,11 @@ run test-no-install env -u BENILLA_REQUIRE_DATA WOW_DATA= cargo test --workspace
 
 # doc-links: refuses a doc link to a `crate::`, `super::`, `self::` or `Self::` path whose leaf is
 # declared nowhere in the workspace. Narrow on purpose: every other unresolved link is a convention.
-run doc-links scripts/doc-links.py
+run doc-links tools/doc-links.py
 
 # pass-span-lint: refuses a second `pass_span` on a render pass whose span is still open, a fatal
 # wgpu validation error on Vulkan and a silent no-op on Metal and DX12, which no macOS run sees.
-run pass-span-lint scripts/pass-span-lint.py
+run pass-span-lint tools/pass-span-lint.py
 
 # player-tests: the player build, `benilla-app` without `dev`, which compiles out the debug panel,
 # perf HUD, inspector, capture harness and probes, so it fails when any other code names one of
@@ -160,5 +160,5 @@ if [ -n "$key_end" ] && [ "$key_end" = "$key_start" ] && [ -d target ]; then
     printf '%s|%s%s\n' "$key_end" "$wow_data" "$corpus" > "$stamp" 2>/dev/null || true
 fi
 
-# The clean-run gate, scripts/smoke.sh, needs a server and a window: named here, not run.
-echo "  (a clean run is the fourth gate: scripts/smoke.sh — live logout/re-login round trip)"
+# The clean-run gate, tools/smoke.sh, needs a server and a window: named here, not run.
+echo "  (a clean run is the fourth gate: tools/smoke.sh — live logout/re-login round trip)"

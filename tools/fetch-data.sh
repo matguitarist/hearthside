@@ -54,7 +54,7 @@ while IFS=$'\t' read -r name size sha; do
         || [ "$(shasum -a 256 "$f" | cut -d' ' -f1)" != "$sha" ]; then
         echo "  corrupt: $name"; rm -f "$f"; bad=1
     fi
-done < "$ROOT/scripts/data-manifest.tsv"
+done < "$ROOT/tools/data-manifest.tsv"
 if [ "$bad" = 1 ]; then
     echo "the download is damaged; delete $ZIP and run this again"
     exit 1

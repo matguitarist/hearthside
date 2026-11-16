@@ -15,10 +15,10 @@ tells the mechanisms apart:
     the limiter's own pumping . post clean but gain diving repeatedly
 
 Usage:
-    scripts/soundprobe.py                       # the default benilla-config/sound-probe
-    scripts/soundprobe.py <dir>                 # a capture directory
-    scripts/soundprobe.py <dir> --around 2.0    # widen the window read around each mark
-    scripts/soundprobe.py <dir> --json
+    tools/soundprobe.py                       # the default benilla-config/sound-probe
+    tools/soundprobe.py <dir>                 # a capture directory
+    tools/soundprobe.py <dir> --around 2.0    # widen the window read around each mark
+    tools/soundprobe.py <dir> --json
 
 Pure stdlib, so it runs without installing anything. Windowed reductions use `max`/`min` on array
 slices so the hot loop stays in C; the per-sample passes run only near the marks.

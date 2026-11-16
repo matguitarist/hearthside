@@ -1,4 +1,4 @@
-//! The realm-list boundary smoke (`WOW_REALM_SMOKE=1`, run by `scripts/smoke.sh`), against a
+//! The realm-list boundary smoke (`WOW_REALM_SMOKE=1`, run by `tools/smoke.sh`), against a
 //! real server:
 //!
 //! 1. from character select, Change Realm: the dialog goes up over the screen, which stays;
@@ -65,7 +65,7 @@ pub(super) fn debug_realm_smoke(
         {
             fail(&format!(
                 "{key}={} seats a body — this walk drives CHARACTER SELECT and there is no roster \
-                 screen to drive once one is seated. Unset it (`scripts/smoke.sh` does).",
+                 screen to drive once one is seated. Unset it (`tools/smoke.sh` does).",
                 value.to_string_lossy(),
             ));
             walk.phase = u8::MAX;

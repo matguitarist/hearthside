@@ -1,6 +1,6 @@
 # benilla — generated map
 
-> **GENERATED** by `scripts/genmap.sh` from the code — do not edit by hand; rerun the script
+> **GENERATED** by `tools/genmap.sh` from the code — do not edit by hand; rerun the script
 > when what's built changes. *What-is* only: the *what-changed* is in git. No timestamp —
 > identical code yields an identical map.
 
@@ -525,7 +525,7 @@
 - `WOW_WORLDVIEW_SHOT_AT` — benilla-world/src/worldview.rs
 - `WOW_WORLDVIEW_SURVEY` — benilla-world/src/worldview.rs
 
-## Scripts (`scripts/`)
+## Scripts (`tools/`)
 
 - `doc-links.py` — Fail on a doc link whose target is declared nowhere in the workspace.
 - `gen-message-catalog.py` — Generate `crates/benilla-ui/src/messages/catalog.rs` from `reference/1.12-message-catalog.tsv`.

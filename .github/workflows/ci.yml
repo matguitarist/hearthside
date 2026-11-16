@@ -1,4 +1,4 @@
-# The gates of scripts/gates.sh that need neither a WoW install nor a display, on Linux, for a pull
+# The gates of tools/gates.sh that need neither a WoW install nor a display, on Linux, for a pull
 # request from a fork: a red one is seen before anyone builds it. The data-gated tests, the engine
 # boot checks and a live run happen on the maintainer's machine before it lands.
 name: CI
@@ -45,8 +45,8 @@ jobs:
       - name: test
         run: cargo test --workspace
       - name: doc-links
-        run: scripts/doc-links.py
+        run: tools/doc-links.py
       - name: pass-span-lint
-        run: scripts/pass-span-lint.py
+        run: tools/pass-span-lint.py
       - name: player-tests
         run: cargo test -p benilla-formats -p benilla-app --no-default-features --lib
