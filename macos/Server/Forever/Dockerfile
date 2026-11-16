@@ -15,7 +15,7 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
         build-essential clang cmake git ca-certificates libmysqlclient-dev libssl-dev libbz2-dev \
         libreadline-dev libncurses-dev libboost-all-dev \
     && rm -rf /var/lib/apt/lists/*
-ARG FOREVER_REF=063c74ab24b4d2f1587526ad43bf7c8dde9650d5
+ARG FOREVER_REF=51b5ae0971fadf2e96a16b4730e986cc33e29adb
 RUN git init -q /src && cd /src && git remote add origin https://github.com/Karrz1/TrinityCore.git \
     && git fetch -q --depth 1 origin ${FOREVER_REF} && git checkout -q FETCH_HEAD
 # CascLib opens the client's files read-write, which a read-only mount of the client refuses: the
@@ -23,11 +23,6 @@ RUN git init -q /src && cd /src && git remote add origin https://github.com/Karr
 RUN f=/src/dep/CascLib/src/common/FileStream.cpp \
     && sed -i 's#^\( *\)handle = open(szFileName, oflag | O_LARGEFILE);#&\n\1if(handle == -1 \&\& (errno == EROFS || errno == EACCES)) handle = open(szFileName, O_RDONLY | O_LARGEFILE);#' $f \
     && grep -q 'errno == EROFS' $f
-# Upstream took the hired bots out (312fdf59), then a cherry-pick (7c70f336, ".bot add brings the class you
-# picked") put back a command that hires them, and the module no longer compiles. That command's change is
-# undone; drop the patch once upstream fixes it (the build stops here when it no longer applies).
-COPY hire-revert.patch /tmp/
-RUN cd /src && git apply -R /tmp/hire-revert.patch
 
 # The map readers only: dbc, gt, cameras, maps, vmaps and mmaps from the client.
 FROM source AS tools-build

@@ -4,10 +4,10 @@
 # with CLIENT_DATA set to the game's Data folder. It takes the same ports as the vmangos server, so
 # the launcher runs one at a time. Ports bind to this Mac only.
 
-name: azeroth-survivors-cmangos
+name: hearthside-vanilla
 
 x-server: &server
-  image: azeroth-survivors-cmangos:1
+  image: hearthside-vanilla:1
   restart: 'no'
   depends_on:
     database:
@@ -145,7 +145,7 @@ services:
   # Movement maps, from the maps and models above: the bots path on them (they cannot run
   # without), as CMaNGOS's own format (`MMAP_VERSION` 8; vmangos writes 6). Every core, once.
   build-mmaps:
-    image: azeroth-survivors-cmangos:1
+    image: hearthside-vanilla:1
     profiles: ['tools']
     working_dir: /data
     entrypoint:

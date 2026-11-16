@@ -2,10 +2,10 @@
 # address only. It takes the same ports as the CMaNGOS server (3724, and the world's: WORLD_PORT in
 # `.env`, see `home-compose`), so one runs at a time.
 
-name: azeroth-survivors-pandaria
+name: hearthside-pandaria
 
 x-server: &server
-  image: azeroth-survivors-pandaria:1
+  image: hearthside-pandaria:1
   depends_on:
     database:
       condition: service_healthy
@@ -70,7 +70,7 @@ services:
   # The server's data from the client's MPQs: DBC files, maps and cameras, then the buildings'
   # line-of-sight models. Run in a copy of the client folder's layout, as the tools expect.
   extract:
-    image: azeroth-survivors-pandaria:1
+    image: hearthside-pandaria:1
     profiles: ['tools']
     working_dir: /work
     entrypoint:
@@ -93,7 +93,7 @@ services:
 
   # Movement maps from the above, for the bots: several hours, every core, once.
   mmaps:
-    image: azeroth-survivors-pandaria:1
+    image: hearthside-pandaria:1
     profiles: ['tools']
     working_dir: /data
     entrypoint:

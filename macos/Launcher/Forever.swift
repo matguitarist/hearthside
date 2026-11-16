@@ -6,7 +6,7 @@ import Security
 /// Forever: Blizzard's WoW Forever client against a TrinityCore server with bots (Karrz1's
 /// forever-bots) on the home server (`macos/Server/Forever`).
 ///
-/// The server lives beside the Classic and Pandaria ones, in `azeroth-survivors-forever`, reached
+/// The server lives beside the Classic and Pandaria ones, in `hearthside-forever`, reached
 /// over the same SSH connection (`HomeServer`). It has its own ports (1119 and 8081 for the login,
 /// a world port from 8105), so it runs beside them. Setup copies the recipe and starts `home-setup`
 /// there, which builds the server from source; meanwhile the game data is read from the client on
@@ -51,13 +51,13 @@ final class ForeverServer: ObservableObject {
     @Published var clientError: String?
 
     static let shared = ForeverServer()
-    nonisolated static let project = "azeroth-survivors-forever"
+    nonisolated static let project = "hearthside-forever"
     /// The playerbot module's own Battle.net accounts.
     nonisolated static let botDomain = "@PLAYERBOT-V2.LOCAL"
     let adminLevel = 3
     /// The recipe's files the server needs; the Mac-side scripts run from the app.
     private static let scripts = ["Dockerfile", "compose.yaml", "forever-start", "forever-install", "forever-extract",
-                                  "home-compose", "home-setup", "hire-revert.patch"]
+                                  "home-compose", "home-setup"]
 
     private var home: HomeServer { .shared }
     private var setUpDone = false

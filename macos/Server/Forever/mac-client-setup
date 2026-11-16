@@ -18,7 +18,7 @@ target=${2:-192.168.40.210}
 [[ $target == *@* ]] || target=root@$target
 host=${target#*@}
 key=${HEARTHSIDE_SSH_KEY:-~/.ssh/id_ed25519_homeserver}
-remote=${FOREVER_REMOTE:-/mnt/cache/appdata/azeroth-survivors-forever}
+remote=${FOREVER_REMOTE:-/mnt/cache/appdata/hearthside-forever}
 login=trinity.actual.battle.net
 dir=$wow/_forever_
 src="$dir/World of Warcraft.app"

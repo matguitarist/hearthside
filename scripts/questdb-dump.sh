@@ -3,7 +3,7 @@
 # Classic world database in the launcher's container. Run it where the container is:
 #   ssh root@server bash -s < scripts/questdb-dump.sh > world.tsv
 set -euo pipefail
-db=${DB_CONTAINER:-azeroth-survivors-cmangos-database-1}
+db=${DB_CONTAINER:-hearthside-vanilla-database-1}
 q() { echo "#$1"; docker exec "$db" mariadb -umangos -pmangos -N -B classicmangos -e "$2"; }
 q quest "select entry, Title, QuestLevel, MinLevel, RequiredRaces, ZoneOrSort, ObjectiveText1, ObjectiveText2, ObjectiveText3, ObjectiveText4, ReqItemId1, ReqItemId2, ReqItemId3, ReqItemId4, ReqCreatureOrGOId1, ReqCreatureOrGOId2, ReqCreatureOrGOId3, ReqCreatureOrGOId4, ReqSpellCast1, ReqSpellCast2, ReqSpellCast3, ReqSpellCast4 from quest_template"
 q ctpl "select Entry, Name, LootId from creature_template"

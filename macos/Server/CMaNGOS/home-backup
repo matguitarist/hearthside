@@ -12,7 +12,7 @@
 # cache pool, so one disk failing cannot take the server and its backups together.
 set -euo pipefail
 cd "$(dirname "$0")"
-p=azeroth-survivors-cmangos
+p=hearthside-vanilla
 db=$p-database-1
 keep=${KEEP:-14}
 if [[ -d /mnt/user ]]; then dir=/mnt/user/backups/$p; else dir=$PWD/backups; fi
@@ -56,9 +56,9 @@ schedule)
     line="30 4 * * * $PWD/home-backup now >/dev/null 2>&1"
     if [[ -d /boot/config/plugins/dynamix ]]; then
         # Unraid rebuilds root's crontab from these files at boot (`update_cron`).
-        cron=/boot/config/plugins/dynamix/azeroth-survivors-backup.cron
+        cron=/boot/config/plugins/dynamix/hearthside-backup.cron
         if ! grep -qxF "$line" "$cron" 2>/dev/null; then
-            printf '# Azeroth Survivors server backups:\n%s\n' "$line" >"$cron"
+            printf '# Hearthside server backups:\n%s\n' "$line" >"$cron"
             update_cron
         fi
     elif ! crontab -l 2>/dev/null | grep -qxF "$line"; then

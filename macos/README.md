@@ -49,7 +49,7 @@ The launcher:
   `macos/Server/CMaNGOS/Dockerfile` (no arm64 images exist, and playerbots has no license, so the
   app ships the recipe, not a binary): about 25 minutes with the maps, each source pinned to a tested commit.
   It lives in `Application Support/Hearthside/Server-CMaNGOS` (project
-  `azeroth-survivors-cmangos`), with its own databases and accounts, on the same ports, so starting
+  `hearthside-vanilla`), with its own databases and accounts, on the same ports, so starting
   one stops the other. The image carries its configs: anticheat off (with it on, CMaNGOS arms
   Warden for every session, whatever `Warden.Enable` says), 100 random bots. The bots cannot run
   without line of sight and movement maps (they assert a navmesh), so setup builds the full data:
@@ -66,7 +66,7 @@ The launcher:
   `HomeServer.swift`): an always-on Linux machine with Docker on the network, an Unraid box say,
   driven over SSH with a key the launcher can make (`BatchMode`, no passphrase, the host's key
   accepted on first use). Setup rsyncs the recipe and the seven MPQs the map tools read into
-  `/mnt/user/appdata/azeroth-survivors-cmangos` (Unraid) or `~/azeroth-survivors-cmangos`, writes
+  `/mnt/user/appdata/hearthside-vanilla` (Unraid) or `~/hearthside-vanilla`, writes
   an `.env` (`LAN_IP` from the address, `BOTS`, `BOT_ACCOUNTS`), and starts `home-setup` there
   detached: the same steps, an hour or two on a small CPU, its step in `.setup-step`, then
   `.setup-done` or `.setup-failed`, so the launcher can quit and pick it up again. Everything after
@@ -102,7 +102,7 @@ The launcher:
   launcher draws from this Mac's game files (`warcraft-survivors --world-maps`) and copies over,
   as none ship in the repository. Settings › Home Server shows the same live, with Open Dashboard. Nothing is forwarded to the internet. `home-backup` dumps the accounts and characters
   nightly at 4:30 (a dynamix cron file on Unraid, else root's crontab; to
-  `/mnt/user/backups/azeroth-survivors-cmangos`, else `backups/`, 14 kept), and Settings › Backups & Updates backs up and restores on demand, a restore saving the state
+  `/mnt/user/backups/hearthside-vanilla`, else `backups/`, 14 kept), and Settings › Backups & Updates backs up and restores on demand, a restore saving the state
   it replaces first. `home-update check` compares the commits the image was built from (`.refs`,
   else the Dockerfile's pins) with the newest on GitHub; Update Server… starts `home-update run`
   detached (`.update-step`, `update.log`): it backs up, rebuilds the image, reinstalls the world
@@ -113,7 +113,7 @@ The launcher:
 - **Plays Pandaria** (the third mode; `Pandaria.swift`, `PandariaView.swift`, Settings › Pandaria):
   Mists of Pandaria 5.4.8 with bots, from
   [LoA-Pandaria-Playerbots](https://github.com/1LineAtaTime/LoA-Pandaria-Playerbots) (TrinityCore),
-  on the home server beside CMaNGOS in `azeroth-survivors-pandaria` (project of the same name), on
+  on the home server beside CMaNGOS in `hearthside-pandaria` (project of the same name), on
   the same ports, so starting one stops the other. It plays with the player's own World of
   Warcraft 5.4.8 for Mac (its folder chosen in the launcher; nothing of it ships). Set Up rsyncs
   `macos/Server/Pandaria` and the client's `Data` (about 23 GB) there, writes `LAN_IP` and

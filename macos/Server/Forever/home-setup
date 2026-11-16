@@ -13,9 +13,9 @@ trap '[ -f .setup-done ] || touch .setup-failed; rm -f .setup-pid' EXIT
 dc() { ./home-compose "$@"; }
 step() { echo "$1" > .setup-step; echo "== $(date '+%F %T') $1"; shift; "$@"; }
 build() {
-    docker image inspect azeroth-survivors-forever:1 >/dev/null 2>&1 || docker buildx build --load -t azeroth-survivors-forever:1 .
-    docker image inspect azeroth-survivors-forever-chat:1 >/dev/null 2>&1 ||
-        docker buildx build --load --target chat -t azeroth-survivors-forever-chat:1 .
+    docker image inspect hearthside-forever:1 >/dev/null 2>&1 || docker buildx build --load -t hearthside-forever:1 .
+    docker image inspect hearthside-forever-chat:1 >/dev/null 2>&1 ||
+        docker buildx build --load --target chat -t hearthside-forever-chat:1 .
 }
 data() {
     until [ -f storage/data/vmaps/GameObjectModels.dtree ] && compgen -G 'storage/data/mmaps/*.mmtile' >/dev/null; do sleep 30; done

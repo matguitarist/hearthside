@@ -5,7 +5,7 @@ import Foundation
 /// (an Unraid box, say), set up and run from here over SSH.
 ///
 /// The launcher copies the CMaNGOS recipe and the game files the map tools read into a folder
-/// there (`/mnt/user/appdata/azeroth-survivors-cmangos` on Unraid, else in the login's home), with
+/// there (`/mnt/user/appdata/hearthside-vanilla` on Unraid, else in the login's home), with
 /// an `.env` that publishes the realm at the server's address. `home-setup` then runs there on its
 /// own, an hour or two on a small CPU, so the launcher can quit meanwhile; everything after goes
 /// through `home-compose` and `docker exec`. The server restarts with the machine and keeps
@@ -150,7 +150,7 @@ final class HomeServer: ObservableObject {
     static let defaultKey = "~/.ssh/id_ed25519"
     /// The CMaNGOS level of an administrator (`SEC_ADMINISTRATOR`).
     let adminLevel = 3
-    private static let project = "azeroth-survivors-cmangos"
+    private static let project = "hearthside-vanilla"
     private static let realmDB = "classicrealmd"
     /// The game files the map tools read, of the client's Data folder.
     /// The recipe's scripts and compose files the launcher keeps current on the server; the
@@ -297,9 +297,9 @@ final class HomeServer: ObservableObject {
     /// The folder on the server, once: Unraid's appdata share if there is one, else the login's home.
     func findFolder() async throws {
         guard folder.isEmpty else { return }
-        let found = try await ssh(#"if [ -d /mnt/user/appdata ]; then echo /mnt/user/appdata/azeroth-survivors-cmangos; else echo "$HOME/azeroth-survivors-cmangos"; fi"#,
+        let found = try await ssh(#"if [ -d /mnt/user/appdata ]; then echo /mnt/user/appdata/hearthside-vanilla; else echo "$HOME/hearthside-vanilla"; fi"#,
                                   quiet: true)
-        guard found.range(of: #"^/[A-Za-z0-9/._-]+/azeroth-survivors-cmangos$"#, options: .regularExpression) != nil else {
+        guard found.range(of: #"^/[A-Za-z0-9/._-]+/hearthside-vanilla$"#, options: .regularExpression) != nil else {
             throw ServerError("The server's home folder has an unusual path: \(found)")
         }
         UserDefaults.standard.set(found, forKey: Prefs.homeDirKey)
@@ -660,11 +660,11 @@ final class HomeServer: ObservableObject {
 
     /// The server's containers, its databases (every character on it), its image and its folder go.
     func remove() async {
-        guard !isBusy, !folder.isEmpty, folder.hasSuffix("/azeroth-survivors-cmangos") else { return }
+        guard !isBusy, !folder.isEmpty, folder.hasSuffix("/hearthside-vanilla") else { return }
         await run("Removing the server…") {
             try await self.ssh("""
                 cd \(self.folder) && { for f in .setup-pid .update-pid; do [ ! -f $f ] || kill "$(cat $f)" 2>/dev/null; done; ./home-compose --profile tools down -v; }
-                docker rmi azeroth-survivors-cmangos:1 2>/dev/null
+                docker rmi hearthside-vanilla:1 2>/dev/null
                 rm -rf \(self.folder)
                 """)
             self.accounts = []
@@ -710,7 +710,7 @@ final class HomeServer: ObservableObject {
     /// not write through a symlink another user owns, as Unraid's exclusive shares are
     /// (`/mnt/user/appdata` -> `../cache/appdata`, owned by nobody).
     private func rsync(_ sources: [String], into sub: String = "") async throws {
-        try await rsync(sources, to: folder, named: "azeroth-survivors-cmangos", into: sub)
+        try await rsync(sources, to: folder, named: "hearthside-vanilla", into: sub)
     }
 
     /// Copies into `remote`, a folder on the server whose name must be `named`.

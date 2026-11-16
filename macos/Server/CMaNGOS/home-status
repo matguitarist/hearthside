@@ -1,6 +1,6 @@
 #!/bin/bash
 # The home server's dashboard, for this folder's Classic server and the Pandaria and Forever ones
-# beside it (`../azeroth-survivors-pandaria`, `../azeroth-survivors-forever`). Every minute cron runs
+# beside it (`../hearthside-pandaria`, `../hearthside-forever`). Every minute cron runs
 # `tick`: it writes what the servers are doing into `storage/dashboard/` (`status.json`, a day of
 # `history.tsv`, `history-pandaria.tsv` and `history-forever.tsv`),
 # then for the rest of the minute carries out what the dashboard's buttons ask. The `dashboard`
@@ -16,10 +16,10 @@
 #   home-status schedule               run `tick` every minute and keep the dashboard container up
 set -euo pipefail
 cd "$(dirname "$0")"
-p=azeroth-survivors-cmangos
-pp=azeroth-survivors-pandaria
+p=hearthside-vanilla
+pp=hearthside-pandaria
 pd=../$pp
-fp=azeroth-survivors-forever
+fp=hearthside-forever
 fd=../$fp
 out=storage/dashboard
 requests=storage/dashboard-requests
@@ -431,9 +431,9 @@ password)
 schedule)
     line="* * * * * $PWD/home-status tick >/dev/null 2>&1"
     if [[ -d /boot/config/plugins/dynamix ]]; then
-        cron=/boot/config/plugins/dynamix/azeroth-survivors-status.cron
+        cron=/boot/config/plugins/dynamix/hearthside-status.cron
         if ! grep -qxF "$line" "$cron" 2>/dev/null; then
-            printf '# Azeroth Survivors server dashboard:\n%s\n' "$line" >"$cron"
+            printf '# Hearthside server dashboard:\n%s\n' "$line" >"$cron"
             update_cron
         fi
     elif ! crontab -l 2>/dev/null | grep -qxF "$line"; then

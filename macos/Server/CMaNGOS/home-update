@@ -19,7 +19,7 @@
 # database, the old movement maps and the backup.
 set -euo pipefail
 cd "$(dirname "$0")"
-p=azeroth-survivors-cmangos
+p=hearthside-vanilla
 image=$p:1
 dc() { ./home-compose "$@"; }
 repos=(mangos-classic playerbots classic-db)

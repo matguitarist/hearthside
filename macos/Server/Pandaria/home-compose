@@ -4,7 +4,7 @@
 # The launcher runs everything through it.
 set -euo pipefail
 cd "$(dirname "$0")"
-p=azeroth-survivors-pandaria
+p=hearthside-pandaria
 f=(-p "$p" -f compose.yaml)
 d=$PWD
 # The world's port on the host, `WORLD_PORT` in `.env`: 8085, the game's own, unless something

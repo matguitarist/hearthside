@@ -183,7 +183,7 @@ enum LogReader {
     @MainActor
     static func localServer() async throws -> String {
         guard let docker = Docker.binary else { throw ServerError("\(Docker.engineName) is not installed.") }
-        let container = LocalServer.shared.kind == .vmangos ? "azeroth-survivors-mangosd-1" : "azeroth-survivors-cmangos-mangosd-1"
+        let container = LocalServer.shared.kind == .vmangos ? "azeroth-survivors-mangosd-1" : "hearthside-vanilla-mangosd-1"
         return try await Docker.run(URL(fileURLWithPath: "/bin/sh"),
                                     ["-c", "'\(docker.path)' logs --timestamps --tail \(maxLines) \(container) 2>&1"], quiet: true)
     }

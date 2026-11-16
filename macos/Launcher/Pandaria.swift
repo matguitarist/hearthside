@@ -5,8 +5,8 @@ import Foundation
 /// Pandaria: Mists of Pandaria 5.4.8 with playerbots (LoA-Pandaria-Playerbots) on the home server,
 /// played with the player's own 5.4.8 Mac client (`macos/Server/Pandaria`).
 ///
-/// The server lives beside the Classic one, in `azeroth-survivors-pandaria` next to
-/// `azeroth-survivors-cmangos`, reached over the same SSH connection (`HomeServer`). Setup copies
+/// The server lives beside the Classic one, in `hearthside-pandaria` next to
+/// `hearthside-vanilla`, reached over the same SSH connection (`HomeServer`). Setup copies
 /// the recipe and the client's Data folder there and starts `home-setup`, which builds the server
 /// from source, its databases and its maps on its own (a few hours on a small CPU), so the launcher
 /// can quit meanwhile. Both servers take the same ports: starting one stops the other.
@@ -45,7 +45,7 @@ final class PandariaServer: ObservableObject {
     @Published var clientError: String?
 
     static let shared = PandariaServer()
-    nonisolated static let project = "azeroth-survivors-pandaria"
+    nonisolated static let project = "hearthside-pandaria"
     /// The level of an administrator (`SEC_ADMINISTRATOR`), as `pandaria-account --gm` sets it.
     let adminLevel = 3
     /// The recipe's files the launcher keeps current on the server.

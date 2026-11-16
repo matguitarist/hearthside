@@ -16,8 +16,8 @@ gm=0 change=0
 host=${1:-192.168.40.210}
 [[ $host == *@* ]] || host=root@$host
 key=${HEARTHSIDE_SSH_KEY:-~/.ssh/id_ed25519_homeserver}
-remote=${FOREVER_REMOTE:-/mnt/cache/appdata/azeroth-survivors-forever}
-p=azeroth-survivors-forever
+remote=${FOREVER_REMOTE:-/mnt/cache/appdata/hearthside-forever}
+p=hearthside-forever
 on_server() { ssh -i "$key" -o IdentitiesOnly=yes -o BatchMode=yes "$host" "$@"; }
 sql() { on_server docker exec -i $p-database-1 mysql -uroot -ppassword -N -B auth 2>/dev/null; }
 

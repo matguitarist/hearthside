@@ -2,10 +2,10 @@
 # bots, and MySQL 8.0, ports on the LAN address only. Its ports are its own (1119 and 8081 for the
 # login, WORLD_PORT for the world, see `home-compose`), so it runs beside the other servers.
 
-name: azeroth-survivors-forever
+name: hearthside-forever
 
 x-server: &server
-  image: azeroth-survivors-forever:1
+  image: hearthside-forever:1
   depends_on:
     database:
       condition: service_healthy
@@ -62,7 +62,7 @@ services:
   # bot bridge's report for the dashboard. It reads and writes the bridge's files, which the
   # worldserver shares.
   chat:
-    image: azeroth-survivors-forever-chat:1
+    image: hearthside-forever-chat:1
     build:
       context: .
       target: chat
