@@ -30,9 +30,9 @@ js() { printf '"%s"' "$(printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' |
 
 health() { docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$1" 2>/dev/null || echo missing; }
 
-sql() { docker exec "$p-database-1" mariadb -umangos -pmangos -N -B -e "$1" 2>/dev/null; }
-psql() { docker exec "$pp-database-1" mysql -uroot -ppassword -N -B -e "$1" 2>/dev/null; }
-fsql() { docker exec "$fp-database-1" mysql -uroot -ppassword -N -B -e "$1" 2>/dev/null; }
+sql() { docker exec "$p-database" mariadb -umangos -pmangos -N -B -e "$1" 2>/dev/null; }
+psql() { docker exec "$pp-database" mysql -uroot -ppassword -N -B -e "$1" 2>/dev/null; }
+fsql() { docker exec "$fp-database" mysql -uroot -ppassword -N -B -e "$1" 2>/dev/null; }
 
 # A setup or an update still running in a server's folder.
 busy() { local f; for f in "$1"/.setup-pid "$1"/.update-pid; do [ -f "$f" ] && kill -0 "$(cat "$f")" 2>/dev/null && return 0; done; return 1; }
@@ -45,7 +45,7 @@ pnoise='EngagementStart called even though creature is already engaged'
 declare -A cpu mem
 stats() {
     local names name c m
-    names=$(docker ps --format '{{.Names}}' | grep -E "^($p-(mangosd|database)|$pp-(worldserver|database)|$fp-(worldserver|database))-1$" || true)
+    names=$(docker ps --format '{{.Names}}' | grep -E "^($p-(mangosd|database)|$pp-(worldserver|database)|$fp-(worldserver|database))$" || true)
     [ -n "$names" ] || return 0
     # `49.15%|5.419GiB / 22.92GiB`, in bytes.
     while IFS='|' read -r name c m; do
@@ -93,13 +93,13 @@ history() {
 
 classic() {
     local realmd mangosd database state since players="[]" bots=0 nplayers=0 levels="[]" dots="" auctions=0
-    realmd=$(health $p-realmd-1) mangosd=$(health $p-mangosd-1) database=$(health $p-database-1)
+    realmd=$(health $p-realmd) mangosd=$(health $p-mangosd) database=$(health $p-database)
     if [ "$realmd" = healthy ] && [ "$mangosd" = healthy ]; then state=up
     elif [ "$mangosd" = starting ] || [ "$realmd" = starting ]; then state=starting
     elif [ "$mangosd" = missing ]; then state=missing
     else state=stopped; fi
     ! busy . || state=busy
-    since=$(docker inspect -f '{{.State.StartedAt}}' "$p-mangosd-1" 2>/dev/null || true)
+    since=$(docker inspect -f '{{.State.StartedAt}}' "$p-mangosd" 2>/dev/null || true)
 
     if [ "$database" = healthy ]; then
         players=$(sql "SELECT c.name, c.level, c.race, c.class, c.map, ROUND(c.position_x), ROUND(c.position_y) FROM classiccharacters.characters c JOIN classicrealmd.account a ON a.id = c.account WHERE c.online = 1 AND a.username NOT LIKE 'RNDBOT%' ORDER BY c.level DESC, c.name" | players)
@@ -135,24 +135,24 @@ classic() {
         [ -z "$value" ] || settings+="${settings:+,}$(js "$key"):$(js "$value")"
     done
 
-    local c=${cpu[$p-mangosd-1]:-0} m=${mem[$p-mangosd-1]:-0}
+    local c=${cpu[$p-mangosd]:-0} m=${mem[$p-mangosd]:-0}
     [ "$state" = missing ] || history history.tsv "$nplayers" "$bots" "$c" "$m"
     cat <<EOF
 {"state":"$state","services":{"realmd":$(js "$realmd"),"mangosd":$(js "$mangosd"),"database":$(js "$database")},
 "since":$(js "$since"),"players":$players,"bots":$bots,"botLevels":$levels,"botPositions":[${dots}],"auctions":${auctions:-0},
-"game":{"cpu":$c,"memory":$m},"databaseMemory":${mem[$p-database-1]:-0},
+"game":{"cpu":$c,"memory":$m},"databaseMemory":${mem[$p-database]:-0},
 "backups":[${backups}],"software":{${refs}},"updated_software":$(js "$updated"),
 "settings":{${settings}},"errors":$errors}
 EOF
 }
 
 pandaria() {
-    if [ ! -x $pd/home-compose ] || ! docker inspect $pp-worldserver-1 >/dev/null 2>&1; then
+    if [ ! -x $pd/home-compose ] || ! docker inspect $pp-worldserver >/dev/null 2>&1; then
         echo '{"state":"missing"}'
         return
     fi
     local auth world database state since ip port players="[]" bots=0 nplayers=0 levels="[]" dots=""
-    auth=$(health $pp-authserver-1) world=$(health $pp-worldserver-1) database=$(health $pp-database-1)
+    auth=$(health $pp-authserver) world=$(health $pp-worldserver) database=$(health $pp-database)
     ip=$(sed -n 's/^LAN_IP=//p' $pd/.env 2>/dev/null || true)
     port=$(sed -n 's/^WORLD_PORT=//p' $pd/.env 2>/dev/null || true)
     # Up once the world takes connections: loading it and logging the bots in takes minutes.
@@ -160,7 +160,7 @@ pandaria() {
     elif [ -n "$ip" ] && timeout 2 bash -c "</dev/tcp/$ip/${port:-8085}" 2>/dev/null; then state=up
     else state=starting; fi
     ! busy $pd || state=busy
-    since=$(docker inspect -f '{{.State.StartedAt}}' "$pp-worldserver-1" 2>/dev/null || true)
+    since=$(docker inspect -f '{{.State.StartedAt}}' "$pp-worldserver" 2>/dev/null || true)
 
     # Characters stay marked online after a stop: asked only while the world runs.
     if [ "$database" = healthy ] && [ "$world" = running ]; then
@@ -197,12 +197,12 @@ pandaria() {
         esac
         settings+="${settings:+,}$(js "$key"):$(js "$value")"
     done
-    local c=${cpu[$pp-worldserver-1]:-0} m=${mem[$pp-worldserver-1]:-0}
+    local c=${cpu[$pp-worldserver]:-0} m=${mem[$pp-worldserver]:-0}
     history history-pandaria.tsv "$nplayers" "$bots" "$c" "$m"
     cat <<EOF
 {"state":"$state","services":{"authserver":$(js "$auth"),"worldserver":$(js "$world"),"database":$(js "$database")},
 "since":$(js "$since"),"players":$players,"bots":$bots,"botLevels":$levels,"botPositions":[${dots}],"maps":$maps,
-"game":{"cpu":$c,"memory":$m},"databaseMemory":${mem[$pp-database-1]:-0},
+"game":{"cpu":$c,"memory":$m},"databaseMemory":${mem[$pp-database]:-0},
 "software":{"PANDARIA_REF":$(js "$ref")},"settings":{${settings}},"errors":$errors}
 EOF
 }
@@ -210,19 +210,19 @@ EOF
 # WoW Forever (Karrz1's forever-bots): its own ports, so it runs beside the other two. Its bots
 # wake around the players, up to BOTS; the world server logs how many are in the world each minute.
 forever() {
-    if [ ! -x $fd/home-compose ] || ! docker inspect $fp-worldserver-1 >/dev/null 2>&1; then
+    if [ ! -x $fd/home-compose ] || ! docker inspect $fp-worldserver >/dev/null 2>&1; then
         echo '{"state":"missing"}'
         return
     fi
     local bnet world database state since ip port players="[]" bots=0 nplayers=0 levels="[]" dots="" bot="b.email LIKE '%@PLAYERBOT-V2.LOCAL'"
-    bnet=$(health $fp-bnetserver-1) world=$(health $fp-worldserver-1) database=$(health $fp-database-1)
+    bnet=$(health $fp-bnetserver) world=$(health $fp-worldserver) database=$(health $fp-database)
     ip=$(sed -n 's/^LAN_IP=//p' $fd/.env 2>/dev/null || true)
     port=$(sed -n 's/^WORLD_PORT=//p' $fd/.env 2>/dev/null || true)
     if [ "$world" != running ]; then state=stopped
     elif [ -n "$ip" ] && timeout 2 bash -c "</dev/tcp/$ip/${port:-8105}" 2>/dev/null; then state=up
     else state=starting; fi
     ! busy $fd || state=busy
-    since=$(docker inspect -f '{{.State.StartedAt}}' "$fp-worldserver-1" 2>/dev/null || true)
+    since=$(docker inspect -f '{{.State.StartedAt}}' "$fp-worldserver" 2>/dev/null || true)
 
     if [ "$database" = healthy ] && [ "$world" = running ]; then
         local from="FROM characters.characters c JOIN auth.account a ON a.id = c.account JOIN auth.battlenet_accounts b ON b.id = a.battlenet_account WHERE c.online = 1"
@@ -266,12 +266,12 @@ forever() {
         ai=$(cat $report)
     fi
     ! grep -q '^ANTHROPIC_API_KEY=..' $fd/.env 2>/dev/null || key=true
-    local c=${cpu[$fp-worldserver-1]:-0} m=${mem[$fp-worldserver-1]:-0}
+    local c=${cpu[$fp-worldserver]:-0} m=${mem[$fp-worldserver]:-0}
     history history-forever.tsv "$nplayers" "$bots" "$c" "$m"
     cat <<EOF
 {"state":"$state","services":{"bnetserver":$(js "$bnet"),"worldserver":$(js "$world"),"database":$(js "$database")},
 "since":$(js "$since"),"players":$players,"bots":$bots,"botLevels":$levels,"botPositions":[${dots}],
-"game":{"cpu":$c,"memory":$m},"databaseMemory":${mem[$fp-database-1]:-0},
+"game":{"cpu":$c,"memory":$m},"databaseMemory":${mem[$fp-database]:-0},
 "software":{"FOREVER_REF":$(js "$(sed -n 's/^ARG FOREVER_REF=//p' $fd/Dockerfile 2>/dev/null || true)")},"settings":{${settings}},"errors":$errors,
 "ai":$ai,"aiKey":$key}
 EOF
@@ -346,12 +346,12 @@ settings() {
         else
             setenv .env BOTS_MOVE_MIN 7200 && setenv .env BOTS_MOVE_MAX 172800
         fi
-        [ "$(docker inspect -f '{{.State.Running}}' $p-mangosd-1 2>/dev/null)" != true ] || ./home-compose up -d database realmd mangosd
+        [ "$(docker inspect -f '{{.State.Running}}' $p-mangosd 2>/dev/null)" != true ] || ./home-compose up -d database realmd mangosd
     elif [ "$server" = pandaria ]; then
-        [ "$(docker inspect -f '{{.State.Running}}' $pp-worldserver-1 2>/dev/null)" != true ] || $pd/home-compose up -d database authserver worldserver
+        [ "$(docker inspect -f '{{.State.Running}}' $pp-worldserver 2>/dev/null)" != true ] || $pd/home-compose up -d database authserver worldserver
     else
         # forever-start reads the settings at each start: a new container for them.
-        [ "$(docker inspect -f '{{.State.Running}}' $fp-worldserver-1 2>/dev/null)" != true ] || $fd/home-compose up -d --force-recreate worldserver chat
+        [ "$(docker inspect -f '{{.State.Running}}' $fp-worldserver 2>/dev/null)" != true ] || $fd/home-compose up -d --force-recreate worldserver chat
     fi
 }
 
@@ -369,10 +369,10 @@ EOF
     # The dashboard offers no button while one runs.
     exec 9>.action.lock
     flock -n 9 || return 1
-    local container=$p-mangosd-1
+    local container=$p-mangosd
     case $server in
-    pandaria) dir=$pd container=$pp-worldserver-1 ;;
-    forever) dir=$fd container=$fp-worldserver-1 ;;
+    pandaria) dir=$pd container=$pp-worldserver ;;
+    forever) dir=$fd container=$fp-worldserver ;;
     esac
     if busy "$dir"; then record failed "$(date +%s)" "The server is being set up or updated."; return 1; fi
     if ! docker inspect "$container" >/dev/null 2>&1; then record failed "$(date +%s)" "The server is not set up."; return 1; fi

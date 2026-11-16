@@ -12,6 +12,7 @@ x-server: &server
 
 services:
   database:
+    container_name: hearthside-pandaria-database
     image: mysql:8.0
     restart: unless-stopped
     stop_grace_period: 2m
@@ -30,6 +31,7 @@ services:
       - MYSQL_ROOT_PASSWORD=password # Not published: the database is reachable from the containers only.
 
   authserver:
+    container_name: hearthside-pandaria-authserver
     <<: *server
     build: .
     restart: unless-stopped
@@ -42,6 +44,7 @@ services:
       - TZ=Etc/UTC
 
   worldserver:
+    container_name: hearthside-pandaria-worldserver
     <<: *server
     restart: unless-stopped
     # The settings in `.env` into the configs first (`worldserver-start`).

@@ -21,6 +21,7 @@ x-server: &server
 
 services:
   database:
+    container_name: hearthside-forever-database
     image: mysql:8.0
     restart: unless-stopped
     stop_grace_period: 2m
@@ -40,6 +41,7 @@ services:
       - MYSQL_ROOT_PASSWORD=password # Not published: the database is reachable from the containers only.
 
   worldserver:
+    container_name: hearthside-forever-worldserver
     <<: *server
     build: .
     restart: unless-stopped
@@ -62,6 +64,7 @@ services:
   # bot bridge's report for the dashboard. It reads and writes the bridge's files, which the
   # worldserver shares.
   chat:
+    container_name: hearthside-forever-chat
     image: hearthside-forever-chat:1
     build:
       context: .
@@ -83,6 +86,7 @@ services:
       - SOAP_PASSWORD_FILE=/hs-storage/soap-password
 
   bnetserver:
+    container_name: hearthside-forever-bnetserver
     <<: *server
     restart: unless-stopped
     command: ['/usr/local/bin/forever-start', 'bnetserver']

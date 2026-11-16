@@ -26,7 +26,7 @@ fi
 
 # The realm list tells clients the port: kept in step with WORLD_PORT after an `up`.
 if [[ " $* " == " up "* ]]; then
-    docker exec $p-database-1 mariadb -umangos -pmangos classicrealmd -e "UPDATE realmlist SET port = $port;" 2>/dev/null || true
+    docker exec $p-database mariadb -umangos -pmangos classicrealmd -e "UPDATE realmlist SET port = $port;" 2>/dev/null || true
 fi
 
 # Unraid stops every container with `docker stop` when Docker shuts down, which `unless-stopped`
@@ -39,14 +39,14 @@ if [[ -f $list ]]; then
     case " $* " in
     " up "*)
         named=" $(printf '%s ' "$@" | sed -e 's/^up //' -e 's/-[^ ]* //g') "
-        for c in "database:$p-database-1 10" "realmd:$p-realmd-1" "mangosd:$p-mangosd-1" "dashboard:$dash"; do
+        for c in "database:$p-database 10" "realmd:$p-realmd" "mangosd:$p-mangosd" "dashboard:$dash"; do
             s=${c%%:*}; c=${c#*:}
             [[ $named == "  " || $named == *" $s "* ]] || continue
             grep -q "^${c%% *}\( \|$\)" "$list" || echo "$c" >>"$list"
         done
         ;;
     *" stop "*)
-        sed -i -e "/^$p-database-1/d" -e "/^$p-realmd-1/d" -e "/^$p-mangosd-1/d" "$list"
+        sed -i -e "/^$p-database/d" -e "/^$p-realmd/d" -e "/^$p-mangosd/d" "$list"
         ;;
     *" down "*)
         sed -i -e "/^$p-/d" -e "/^$dash\( \|$\)/d" "$list"

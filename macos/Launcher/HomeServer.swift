@@ -283,7 +283,7 @@ final class HomeServer: ObservableObject {
             echo "updatestep=$(cat .update-step 2>/dev/null)"
             [ -f .env ] && { echo env=yes; sed -n 's/^[A-Z_][A-Z_]*=/env.&/p' .env; }
             for s in realmd mangosd; do
-              echo "$s=$(docker inspect -f '{{.State.Health.Status}}' \(Self.project)-$s-1 2>/dev/null)"
+              echo "$s=$(docker inspect -f '{{.State.Health.Status}}' \(Self.project)-$s 2>/dev/null)"
             done
             """
         var out: [String: String] = [:]
@@ -409,7 +409,7 @@ final class HomeServer: ObservableObject {
             if s["realmd"] == "healthy", s["mangosd"] == "healthy" { return }
             for name in ["realmd", "mangosd"] where s[name] == "unhealthy" || s[name] == "" {
                 // Gone or stopped: the end of its log says why.
-                let state = try? await ssh("docker inspect -f '{{.State.Status}}' \(Self.project)-\(name)-1", quiet: true)
+                let state = try? await ssh("docker inspect -f '{{.State.Status}}' \(Self.project)-\(name)", quiet: true)
                 if state == "exited" || state == "dead" {
                     throw ServerError("The server's \(name) stopped while starting. Show Log has its output.")
                 }
@@ -453,7 +453,7 @@ final class HomeServer: ObservableObject {
 
     @discardableResult
     private func mariadb(_ args: [String] = [], stdin: String? = nil, quiet: Bool = false) async throws -> String {
-        try await ssh((["docker exec -i \(Self.project)-database-1 mariadb -umangos -pmangos"] + args + [Self.realmDB])
+        try await ssh((["docker exec -i \(Self.project)-database mariadb -umangos -pmangos"] + args + [Self.realmDB])
                         .joined(separator: " "), stdin: stdin, quiet: quiet)
     }
 
@@ -536,10 +536,10 @@ final class HomeServer: ObservableObject {
         guard phase == .running else { stats = nil; return }
         let p = Self.project
         let script = """
-            echo "docker=$(docker stats --no-stream --format '{{.CPUPerc}}|{{.MemUsage}}' \(p)-mangosd-1)"
-            echo "since=$(docker inspect -f '{{.State.StartedAt}}' \(p)-mangosd-1)"
+            echo "docker=$(docker stats --no-stream --format '{{.CPUPerc}}|{{.MemUsage}}' \(p)-mangosd)"
+            echo "since=$(docker inspect -f '{{.State.StartedAt}}' \(p)-mangosd)"
             echo "machine=$(free -b | awk '/^Mem:/ {print $2"|"$7}')|$(nproc)"
-            docker exec \(p)-database-1 mariadb -umangos -pmangos -N -e "SELECT CONCAT('player=', c.name, '|', c.level) FROM classiccharacters.characters c JOIN classicrealmd.account a ON a.id = c.account WHERE c.online = 1 AND a.username NOT LIKE 'RNDBOT%' ORDER BY c.name; SELECT CONCAT('bots=', COUNT(*)) FROM classiccharacters.characters c JOIN classicrealmd.account a ON a.id = c.account WHERE c.online = 1 AND a.username LIKE 'RNDBOT%'"
+            docker exec \(p)-database mariadb -umangos -pmangos -N -e "SELECT CONCAT('player=', c.name, '|', c.level) FROM classiccharacters.characters c JOIN classicrealmd.account a ON a.id = c.account WHERE c.online = 1 AND a.username NOT LIKE 'RNDBOT%' ORDER BY c.name; SELECT CONCAT('bots=', COUNT(*)) FROM classiccharacters.characters c JOIN classicrealmd.account a ON a.id = c.account WHERE c.online = 1 AND a.username LIKE 'RNDBOT%'"
             """
         guard let out = try? await ssh(script, quiet: true) else { return }
         stats = Self.parseStats(out)
@@ -650,7 +650,7 @@ final class HomeServer: ObservableObject {
         switch source {
         case .homeServer: script = "tail -n \(lines) \(logs)/Server.log 2>/dev/null"
         case .homeDatabase: script = "tail -n \(lines) \(logs)/DBErrors.log 2>/dev/null"
-        case .homeRealm: script = "docker logs --timestamps --tail \(lines) \(Self.project)-realmd-1 2>&1"
+        case .homeRealm: script = "docker logs --timestamps --tail \(lines) \(Self.project)-realmd 2>&1"
         case .homeSetup: script = "tail -n \(lines) \(folder)/setup.log 2>/dev/null"
         case .homeUpdate: script = "tail -n \(lines) \(folder)/update.log 2>/dev/null"
         default: return ""

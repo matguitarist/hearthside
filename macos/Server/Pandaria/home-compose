@@ -25,7 +25,7 @@ fi
 
 # The realm list tells clients the port: kept in step with WORLD_PORT after an `up`.
 if [[ " $* " == " up "* ]]; then
-    docker exec $p-database-1 mysql -uroot -ppassword auth -e "UPDATE realmlist SET port = $port WHERE id = 1;" 2>/dev/null || true
+    docker exec $p-database mysql -uroot -ppassword auth -e "UPDATE realmlist SET port = $port WHERE id = 1;" 2>/dev/null || true
 fi
 
 # Unraid's autostart list, kept as the CMaNGOS server keeps it: an `up` puts the containers it
@@ -36,8 +36,8 @@ if [[ -f $list ]]; then
     case " $* " in
     " up "*)
         named=" $(printf '%s ' "$@" | sed -e 's/^up //' -e 's/-[^ ]* //g') "
-        for c in "$p-database-1 10" "$p-authserver-1" "$p-worldserver-1"; do
-            s=${c#"$p-"}; s=${s%%-1*}
+        for c in "$p-database 10" "$p-authserver" "$p-worldserver"; do
+            s=${c#"$p-"}; s=${s%% *}
             [[ $named == "  " || $named == *" $s "* ]] || continue
             grep -q "^${c%% *}\( \|$\)" "$list" || echo "$c" >>"$list"
         done

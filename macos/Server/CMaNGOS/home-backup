@@ -13,7 +13,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 p=hearthside-vanilla
-db=$p-database-1
+db=$p-database
 keep=${KEEP:-14}
 if [[ -d /mnt/user ]]; then dir=/mnt/user/backups/$p; else dir=$PWD/backups; fi
 mkdir -p "$dir"

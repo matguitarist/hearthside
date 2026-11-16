@@ -31,8 +31,8 @@ if [[ -f $list ]]; then
     case " $* " in
     " up "*)
         named=" $(printf '%s ' "$@" | sed -e 's/^up //' -e 's/-[^ ]* //g') "
-        for c in "$p-database-1 10" "$p-worldserver-1" "$p-bnetserver-1" "$p-chat-1"; do
-            s=${c#"$p-"}; s=${s%%-1*}
+        for c in "$p-database 10" "$p-worldserver" "$p-bnetserver" "$p-chat"; do
+            s=${c#"$p-"}; s=${s%% *}
             [[ $named == "  " || $named == *" $s "* ]] || continue
             grep -q "^${c%% *}\( \|$\)" "$list" || echo "$c" >>"$list"
         done

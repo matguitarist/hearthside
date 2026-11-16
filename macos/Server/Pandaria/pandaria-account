@@ -18,7 +18,7 @@ read -rsp "Again: " again; echo
 hash=$(printf '%s:%s' "$name" "$(tr '[:lower:]' '[:upper:]' <<<"$pass")" | shasum -a 1 | cut -d' ' -f1 | tr '[:lower:]' '[:upper:]')
 unset pass again
 
-ssh -i "$key" "root@$host" docker exec -i hearthside-pandaria-database-1 mysql -uroot -ppassword auth 2>/dev/null <<SQL
+ssh -i "$key" "root@$host" docker exec -i hearthside-pandaria-database mysql -uroot -ppassword auth 2>/dev/null <<SQL
 INSERT INTO account (username, sha_pass_hash, email, joindate) VALUES ('$name', '$hash', '', NOW());
 INSERT INTO realmcharacters (realmid, acctid, numchars) SELECT id, LAST_INSERT_ID(), 0 FROM realmlist;
 INSERT INTO account_access (id, gmlevel, RealmID) SELECT LAST_INSERT_ID(), $gm, -1 FROM DUAL WHERE $gm > 0;

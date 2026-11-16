@@ -15,6 +15,7 @@ x-server: &server
 
 services:
   database:
+    container_name: hearthside-vanilla-database
     image: mariadb:11.4
     restart: 'no'
     stop_grace_period: 2m
@@ -32,6 +33,7 @@ services:
       - MARIADB_ROOT_PASSWORD=password # Not published: the database is reachable from the containers only.
 
   realmd:
+    container_name: hearthside-vanilla-realmd
     <<: *server
     build: .
     command: ['/opt/cmangos/bin/realmd']
@@ -50,6 +52,7 @@ services:
       - TZ=Etc/UTC
 
   mangosd:
+    container_name: hearthside-vanilla-mangosd
     <<: *server
     # The auction house bot's stock, AH_STOCK times each category's count in `ahbot.conf`, scaled
     # from the image's copy kept beside it, so a plain restart does not scale it twice.

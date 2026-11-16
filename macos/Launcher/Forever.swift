@@ -143,19 +143,19 @@ final class ForeverServer: ObservableObject {
             command -v docker >/dev/null || { echo state=nodocker; exit 0; }
             cd \(folder) 2>/dev/null || { echo state=none; exit 0; }
             if [ -f .setup-pid ] && kill -0 "$(cat .setup-pid)" 2>/dev/null; then echo state=running
-            elif [ -f .setup-done ] || docker inspect \(p)-worldserver-1 >/dev/null 2>&1; then echo state=done
+            elif [ -f .setup-done ] || docker inspect \(p)-worldserver >/dev/null 2>&1; then echo state=done
             elif [ -f .setup-failed ]; then echo state=failed
             else echo state=none; fi
             echo "step=$(cat .setup-step 2>/dev/null)"
             if [ -f storage/data/vmaps/GameObjectModels.dtree ] && ls storage/data/mmaps 2>/dev/null | grep -q mmtile; then echo data=yes; fi
             for s in database bnetserver worldserver; do
-              echo "$s=$(docker inspect -f '{{.State.Status}}' \(p)-$s-1 2>/dev/null)"
+              echo "$s=$(docker inspect -f '{{.State.Status}}' \(p)-$s 2>/dev/null)"
             done
             ip=$(sed -n 's/^LAN_IP=//p' .env 2>/dev/null)
             port=$(sed -n 's/^WORLD_PORT=//p' .env 2>/dev/null)
             echo "BOTS=$(sed -n 's/^BOTS=//p' .env 2>/dev/null)"
             echo "BOTS_PER_PLAYER=$(sed -n 's/^BOTS_PER_PLAYER=//p' .env 2>/dev/null)"
-            if [ "$(docker inspect -f '{{.State.Status}}' \(p)-worldserver-1 2>/dev/null)" = running ] && [ -n "$ip" ] \\
+            if [ "$(docker inspect -f '{{.State.Status}}' \(p)-worldserver 2>/dev/null)" = running ] && [ -n "$ip" ] \\
               && timeout 2 bash -c "</dev/tcp/$ip/${port:-8105}" 2>/dev/null \\
               && timeout 2 bash -c "</dev/tcp/$ip/1119" 2>/dev/null; then echo world=up; fi
             """
@@ -374,7 +374,7 @@ final class ForeverServer: ObservableObject {
 
     @discardableResult
     private func mysql(_ database: String, stdin: String, quiet: Bool = false) async throws -> String {
-        try await home.ssh("docker exec -i \(Self.project)-database-1 mysql -uroot -ppassword -N -B \(database)",
+        try await home.ssh("docker exec -i \(Self.project)-database mysql -uroot -ppassword -N -B \(database)",
                            stdin: stdin, quiet: quiet)
     }
 
