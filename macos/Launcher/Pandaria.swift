@@ -3,7 +3,7 @@ import CryptoKit
 import Foundation
 
 /// Pandaria: Mists of Pandaria 5.4.8 with playerbots (LoA-Pandaria-Playerbots) on the home server,
-/// played with the player's own 5.4.8 Mac client (`macos/Server/Pandaria`).
+/// played with the player's own 5.4.8 Mac client (`server/Pandaria`).
 ///
 /// The server lives beside the Classic one, in `hearthside-pandaria` next to
 /// `hearthside-vanilla`, reached over the same SSH connection (`HomeServer`). Setup copies
@@ -521,7 +521,7 @@ enum PandariaClient {
         return nil
     }
 
-    /// This client's AzerothPlus and AzerothAdmin (`macos/Server/Pandaria/addons`), or with the
+    /// This client's AzerothPlus and AzerothAdmin (`server/Pandaria/addons`), or with the
     /// setting off, none: the shared "Install AzerothPlus and AzerothAdmin" of Settings › General.
     static func installAddons() {
         guard let folder,

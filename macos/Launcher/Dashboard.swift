@@ -1,6 +1,6 @@
 import Foundation
 
-/// The home server's dashboard (`macos/Server/Dashboard`): one page at `http://<address>:8095` for
+/// The home server's dashboard (`server/Dashboard`): one page at `http://<address>:8095` for
 /// the Classic, Pandaria and Forever servers, in a stack of its own, `hearthside-dashboard`, beside
 /// theirs. The launcher keeps its files current whenever it reaches the server, whichever servers
 /// are set up, and `home-status schedule` there keeps its container up and its cron job in place.

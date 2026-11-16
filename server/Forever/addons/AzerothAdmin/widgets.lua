@@ -1,5 +1,5 @@
 -- AzerothAdmin for the WoW Forever client (1.60, a modern client): the window, its tabs, and small
--- builders for buttons, checkboxes and input boxes. Pandaria's (`macos/Server/Pandaria/addons`) with
+-- builders for buttons, checkboxes and input boxes. Pandaria's (`server/Pandaria/addons`) with
 -- this client's templates, sending the Forever server's TrinityCore commands.
 --
 -- Battle.net's client and Hearthside's copy share `_forever_/Interface/AddOns`, so the addon only

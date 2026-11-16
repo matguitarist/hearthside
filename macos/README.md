@@ -9,7 +9,7 @@ Hearthside.app/Contents/
   MacOS/warcraft-survivors    the game: a player build (--no-default-features), ship profile
   Frameworks/Sparkle.framework
   Resources/                  icon, key art, data-manifest.tsv
-  Resources/Server/           the local server's compose.yaml and configs (macos/Server),
+  Resources/Server/           the local server's compose.yaml and configs (`server/`),
                               the CMaNGOS and Pandaria recipes, Pandaria's 5.4.8 addons
   Resources/AddOns/           Classic's shipped addons (addons/), copied into benilla-config/AddOns
 ```
@@ -32,7 +32,7 @@ The launcher:
   Warden, so a server that requires it refuses the connection; vmangos ships with it off.
 - **Runs the server on this Mac** in Docker (OrbStack or Docker Desktop), from
   [vmangos-deploy](https://github.com/mserajnik/vmangos-deploy)'s prebuilt images
-  (`LocalServer.swift`). Setup copies `macos/Server` (CC0, from that project's examples) to
+  (`LocalServer.swift`). Setup copies `server/` (CC0, from that project's examples) to
   `Application Support/Hearthside/Server`, pulls the images (about 1 GB), reads the terrain
   and DBCs from the game's own Data folder in seconds, and builds the world database (about
   2.5 minutes in all). That quick data plays without line of sight or pathing. Settings › Server
@@ -46,7 +46,7 @@ The launcher:
 - **Or CMaNGOS with bots** (the Server picker): [CMaNGOS Classic](https://github.com/cmangos/mangos-classic)
   with the [playerbots](https://github.com/cmangos/playerbots) module and
   [classic-db](https://github.com/cmangos/classic-db), built on the Mac at setup from
-  `macos/Server/CMaNGOS/Dockerfile` (no arm64 images exist, and playerbots has no license, so the
+  `server/CMaNGOS/Dockerfile` (no arm64 images exist, and playerbots has no license, so the
   app ships the recipe, not a binary): about 25 minutes with the maps, each source pinned to a tested commit.
   It lives in `Application Support/Hearthside/Server-CMaNGOS` (project
   `hearthside-vanilla`), with its own databases and accounts, on the same ports, so starting
@@ -80,7 +80,7 @@ The launcher:
   (`AHBot_`) settings, the stock by scaling every `AhBot.MaxAuctionCount` in `ahbot.conf` from its
   pristine copy as `mangosd` starts, then recreate `mangosd`; bringing bots to players also
   shortens how often they move on (`BOTS_MOVE_MIN`, `BOTS_MOVE_MAX`). The launcher keeps the
-  server's scripts and compose files current on each look. The dashboard (`macos/Server/Dashboard`)
+  server's scripts and compose files current on each look. The dashboard (`server/Dashboard`)
   is a stack of its own, `hearthside-dashboard`, beside the servers it shows, so it is there
   whichever are set up and stays when one is removed; the launcher keeps it current on each look
   as well (`Dashboard.swift`). Its `home-status` writes the state of the Classic, Pandaria and
@@ -119,7 +119,7 @@ The launcher:
   on the home server beside CMaNGOS in `hearthside-pandaria` (project of the same name), on
   the same ports, so starting one stops the other. It plays with the player's own World of
   Warcraft 5.4.8 for Mac (its folder chosen in the launcher; nothing of it ships). Set Up rsyncs
-  `macos/Server/Pandaria` and the client's `Data` (about 23 GB) there, writes `LAN_IP` and
+  `server/Pandaria` and the client's `Data` (about 23 GB) there, writes `LAN_IP` and
   `CLIENT_DATA` to `.env`, and starts `home-setup` detached, as for CMaNGOS: the image built from
   source (a few hours), `install`, the maps read from the client, then the servers, each step
   skipped once done. The worldserver writes `BOTS` from `.env` (300 unless set; the release's

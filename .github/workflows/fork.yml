@@ -62,7 +62,7 @@ jobs:
       - name: Vendors, tooltips, quest helpers and the bot panel against a stubbed client
         run: lua5.1 scripts/addon-tests/features.lua addons/AzerothPlus
       - name: The home-server scripts parse
-        run: for f in macos/Server/CMaNGOS/home-* macos/Server/Dashboard/home-* scripts/questdb-dump.sh; do bash -n "$f" || exit 1; done
+        run: for f in server/CMaNGOS/home-* server/Dashboard/home-* scripts/questdb-dump.sh; do bash -n "$f" || exit 1; done
       - name: The quest data builder compiles
         run: python3 -m py_compile scripts/questdb.py scripts/infodb.py
 

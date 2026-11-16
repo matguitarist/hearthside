@@ -4,7 +4,7 @@ import Foundation
 import Security
 
 /// Forever: Blizzard's WoW Forever client against a TrinityCore server with bots (Karrz1's
-/// forever-bots) on the home server (`macos/Server/Forever`).
+/// forever-bots) on the home server (`server/Forever`).
 ///
 /// The server lives beside the Classic and Pandaria ones, in `hearthside-forever`, reached
 /// over the same SSH connection (`HomeServer`). It has its own ports (1119 and 8081 for the login,
@@ -493,7 +493,7 @@ enum ForeverClient {
         return read("keyswap.sources") == "\(digest)  -"
     }
 
-    /// Our addons for this client (`macos/Server/Forever/addons`): AzerothAdmin.
+    /// Our addons for this client (`server/Forever/addons`): AzerothAdmin.
     static let addonNames = ["AzerothAdmin"]
 
     /// Our addons, there only while Hearthside's client runs: copied in just before it starts

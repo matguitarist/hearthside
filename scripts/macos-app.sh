@@ -111,7 +111,7 @@ rm -rf "$APP/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices" \
        "$APP/Contents/Frameworks/Sparkle.framework/XPCServices"
 cp scripts/data-manifest.tsv "$APP/Contents/Resources/"
 # Classic on this Mac: the compose file and server configs `LocalServer.swift` installs.
-ditto macos/Server "$APP/Contents/Resources/Server"
+ditto server "$APP/Contents/Resources/Server"
 # Python's byte-code caches, should a script have been run from the repo.
 find "$APP/Contents/Resources/Server" -name __pycache__ -prune -exec rm -rf {} +
 # Classic's shipped addons, installed into the game's AddOns folder by `Addons.swift`.
