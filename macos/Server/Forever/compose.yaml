@@ -41,7 +41,7 @@ services:
       - MYSQL_ROOT_PASSWORD=password # Not published: the database is reachable from the containers only.
 
   worldserver:
-    container_name: hearthside-forever-worldserver
+    container_name: hearthside-forever-world
     <<: *server
     build: .
     restart: unless-stopped
@@ -86,7 +86,7 @@ services:
       - SOAP_PASSWORD_FILE=/hs-storage/soap-password
 
   bnetserver:
-    container_name: hearthside-forever-bnetserver
+    container_name: hearthside-forever-auth
     <<: *server
     restart: unless-stopped
     command: ['/usr/local/bin/forever-start', 'bnetserver']
