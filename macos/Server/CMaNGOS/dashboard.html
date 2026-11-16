@@ -134,7 +134,7 @@ form.settings .row { grid-column: 1 / -1; display: flex; gap: 8px; justify-conte
       <h3>Sign in</h3>
       <input type="password" id="password" autocomplete="current-password" placeholder="Dashboard password" required>
       <div class="error" id="login-error"></div>
-      <div class="row"><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn primary" id="login-go" value="go">Sign in</button></div>
+      <div class="row"><button class="btn" type="button" id="login-cancel">Cancel</button><button class="btn primary" id="login-go" value="go">Sign in</button></div>
     </form>
   </dialog>
 
@@ -615,18 +615,27 @@ $("signin").addEventListener("click", async () => {
   $("password").value = "";
   $("login").showModal();
 });
+// Cancel is a plain button: as a form's first submit button it took Return in the password field,
+// closing the dialog without a word.
+$("login-cancel").addEventListener("click", () => $("login").close());
 $("login-form").addEventListener("submit", async e => {
-  if (e.submitter && e.submitter.value === "cancel") return;
   e.preventDefault();
   $("login-go").disabled = true;
+  $("login-error").textContent = "Checking…";
   try {
     const r = await fetch("login", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({password: $("password").value})});
+    const answer = await r.json().catch(() => ({}));
     if (r.ok) {
       session.signedIn = true;
       $("login").close();
       draw();
+    } else if (answer.error === "wrong password") {
+      $("login-error").textContent = "That's not the password.";
+      $("password").select();
+    } else if (answer.error === "no password set") {
+      $("login-error").textContent = "No password is set yet: set one in the launcher, Settings › Home Server.";
     } else {
-      $("login-error").textContent = r.status === 403 && session.passwordSet ? "That's not the password." : "No password is set yet: set one in the launcher, Settings › Home Server.";
+      $("login-error").textContent = `The dashboard couldn't sign you in (${r.status} ${r.statusText}).`;
     }
   } catch (e) {
     $("login-error").textContent = "The dashboard didn't answer.";
