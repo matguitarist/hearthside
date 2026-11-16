@@ -310,9 +310,9 @@ run() {
     "pandaria stop") pstop ;;
     "pandaria restart") cstop && $pd/home-compose up -d database authserver worldserver && $pd/home-compose restart authserver worldserver ;;
     "forever settings") settings forever ;;
-    "forever start") $fd/home-compose up -d database worldserver bnetserver chat ollama ;;
-    "forever stop") $fd/home-compose stop chat ollama bnetserver worldserver database ;;
-    "forever restart") $fd/home-compose up -d database && $fd/home-compose up -d --force-recreate worldserver bnetserver chat ollama ;;
+    "forever start") $fd/home-compose up -d database worldserver bnetserver chat ;;
+    "forever stop") $fd/home-compose stop chat bnetserver worldserver database ;;
+    "forever restart") $fd/home-compose up -d database && $fd/home-compose up -d --force-recreate worldserver bnetserver chat ;;
     *) echo "no such action: $1 $2"; return 2 ;;
     esac
 }
@@ -351,7 +351,7 @@ settings() {
         [ "$(docker inspect -f '{{.State.Running}}' $pp-worldserver-1 2>/dev/null)" != true ] || $pd/home-compose up -d database authserver worldserver
     else
         # forever-start reads the settings at each start: a new container for them.
-        [ "$(docker inspect -f '{{.State.Running}}' $fp-worldserver-1 2>/dev/null)" != true ] || { $fd/home-compose up -d --force-recreate worldserver chat && $fd/home-compose up -d ollama; }
+        [ "$(docker inspect -f '{{.State.Running}}' $fp-worldserver-1 2>/dev/null)" != true ] || $fd/home-compose up -d --force-recreate worldserver chat
     fi
 }
 

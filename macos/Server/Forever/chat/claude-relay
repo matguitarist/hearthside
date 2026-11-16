@@ -24,7 +24,7 @@ USAGE_FILE, so a restart doesn't reset the day.
     RELAY_PORT           default 8411
     USAGE_FILE           default /bridge/claude-usage.json
     STYLE_FILE           default /bridge/style.txt
-    TALK_URL, TALK_MODEL an OpenAI-style service for the bots' talk (http://ollama:11434/v1, llama3.2:1b)
+    TALK_URL, TALK_MODEL an OpenAI-style service for the bots' talk (unset: Claude writes the talk too)
 """
 
 import datetime

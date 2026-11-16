@@ -8,8 +8,8 @@
 #   ANTHROPIC_API_KEY    Claude, through claude-relay (AI_CHAT_MODEL, AI_CHAT_DAILY_USD: see there)
 #   AI_CHAT_URL          or: an OpenAI-style service instead, an Ollama on the LAN for one
 #                        (http://192.168.x.y:11434/v1), with AI_CHAT_MODEL its model (llama3.2:3b)
-#   AI_CHAT_TALK         the world bots' talk among themselves: 0 their written lines, 1 the local
-#                        model (the compose file's `ollama`, AI_CHAT_TALK_MODEL), 2 the chat model
+#   AI_CHAT_TALK         the world bots' talk among themselves: 0 their written lines, 1 or 2 the
+#                        chat model (a local model on the home server was too slow, so it went)
 #   AI_CHAT_ACTIONS      0: the bots only talk, a reply never makes them act
 #   AI_CHAT_ADULT        1: sexual talk allowed (the program forbids it as shipped)
 set -euo pipefail
@@ -72,17 +72,6 @@ fi
 if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
     echo "AI_CHAT=1 but neither ANTHROPIC_API_KEY nor AI_CHAT_URL is set: fixed lines" >&2
     wait
-fi
-
-# The talk's local model: downloaded once into the ollama service's volume.
-if [ "${AI_CHAT_TALK:-0}" = 1 ]; then
-    export TALK_URL=http://ollama:11434/v1 TALK_MODEL=${AI_CHAT_TALK_MODEL:-llama3.2:1b}
-    until curl -fsS http://ollama:11434/api/version >/dev/null 2>&1; do sleep 5; done
-    if ! curl -fsS http://ollama:11434/api/tags | grep -q "\"$TALK_MODEL\""; then
-        echo "downloading $TALK_MODEL for the bots' talk…"
-        curl -fsS http://ollama:11434/api/pull -d "{\"model\":\"$TALK_MODEL\",\"stream\":false}" >/dev/null ||
-            echo "couldn't download $TALK_MODEL: the talk keeps its written lines" >&2
-    fi
 fi
 
 export RELAY_PORT=8411

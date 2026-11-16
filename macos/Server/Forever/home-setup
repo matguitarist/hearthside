@@ -21,10 +21,10 @@ data() {
     until [ -f storage/data/vmaps/GameObjectModels.dtree ] && compgen -G 'storage/data/mmaps/*.mmtile' >/dev/null; do sleep 30; done
 }
 if [ -d /mnt/user/appdata ]; then chown -R nobody:users . 2>/dev/null || true; fi
-mkdir -p storage/logs storage/data storage/certs storage/bridge storage/ollama
+mkdir -p storage/logs storage/data storage/certs storage/bridge
 step "Building the server from source (an hour or more)…" build
 step "Making the databases and the login's certificate…" dc --profile tools run --rm -T install
 step "Waiting for the game data from the Mac…" data
-step "Starting the server: the first start imports the world…" dc up -d database worldserver bnetserver chat ollama
+step "Starting the server: the first start imports the world…" dc up -d database worldserver bnetserver chat
 touch .setup-done
 echo "== $(date '+%F %T') done"
