@@ -24,8 +24,10 @@ services:
       - REALM_ADDRESS=${LAN_IP:?set LAN_IP in .env}
   # The dashboard, for any browser at home: the files `home-status` writes every minute, served
   # read-only, and, once signed in, its buttons' and settings' requests (`dashboard.py`). It stays
-  # up while the game is stopped, to say so and to start it.
+  # up while the game is stopped, to say so and to start it. It shows every server, so its
+  # container is named for them all, not for this stack.
   dashboard:
+    container_name: hearthside-server-dashboard
     image: python:3.13-alpine
     restart: unless-stopped
     init: true

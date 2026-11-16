@@ -426,7 +426,7 @@ act)
 password)
     # Not from standard input, which holds the password.
     ./home-compose up -d dashboard >/dev/null 2>&1 </dev/null
-    docker exec -i $p-dashboard-1 python3 /dashboard.py password
+    docker exec -i hearthside-server-dashboard python3 /dashboard.py password
     ;;
 schedule)
     line="* * * * * $PWD/home-status tick >/dev/null 2>&1"
