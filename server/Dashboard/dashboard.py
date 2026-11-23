@@ -25,7 +25,7 @@ import time
 PASSWORD = "/auth/password"
 SESSION_DAYS = 30
 ACTIONS = {"classic": {"start", "stop", "restart", "backup"}, "pandaria": {"start", "stop", "restart"},
-           "forever": {"start", "stop", "restart"}}
+           "forever": {"start", "stop", "restart", "update", "back", "check"}}
 # Each setting the dashboard may change: its lowest and highest value, and whether it is whole.
 RATE = (0.1, 10, False)
 SWITCH = (0, 1, True)

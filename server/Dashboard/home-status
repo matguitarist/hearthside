@@ -12,7 +12,8 @@
 #
 #   home-status now                    write the status
 #   home-status tick                   `now`, then a minute of the dashboard's requests (cron's)
-#   home-status act <server> <action>  classic|pandaria|forever start|stop|restart|settings, classic backup
+#   home-status act <server> <action>  classic|pandaria|forever start|stop|restart|settings, classic backup,
+#                                      forever update|back|check (`../hearthside-forever/home-update`)
 #   home-status password               the dashboard's password, from standard input
 #   home-status schedule               run `tick` every minute and keep the dashboard container up
 set -euo pipefail
@@ -213,6 +214,60 @@ pandaria() {
 EOF
 }
 
+# What Forever's image was built from, as `home-update` reads it: its label, `.refs`, the recipe's pin.
+fref() {
+    local v
+    v=$(docker image inspect -f '{{index .Config.Labels "hearthside.forever.ref"}}' $fp:1 2>/dev/null || true)
+    [ -n "$v" ] && [ "$v" != "<no value>" ] || v=$(sed -n 's/^FOREVER_REF=//p' $fd/.refs 2>/dev/null || true)
+    [ -n "$v" ] || v=$(sed -n 's/^ARG FOREVER_REF=//p' $fd/Dockerfile 2>/dev/null || true)
+    echo "$v"
+}
+
+# Forever's software: the commit it runs, the newest upstream (`home-update check`, run here in the
+# background every six hours, and again after an update), and its update in progress or failed.
+fsoftware() {
+    local built newest="" key value json="" update="" step checked
+    built=$(fref)
+    if [ -f $fd/.newest ]; then
+        checked=$(stat -c %Y $fd/.newest)
+        newest=$(sed -n 's/^built //p' $fd/.newest)
+    fi
+    # A failed check (GitHub out of reach) is tried again ten minutes later.
+    local stale=0
+    { [ "$newest" != "$built" ] || (($(date +%s) - ${checked:-0} > 21600)); } && stale=1
+    if [ $stale = 1 ] && [ -x $fd/home-update ] && ! busy $fd &&
+        { [ ! -f $fd/.checking ] || [ -n "$(find $fd/.checking -mmin +10 2>/dev/null)" ]; }; then
+        touch $fd/.checking
+        (cd $fd && nohup bash -c './home-update check >/dev/null 2>&1 && rm -f .checking' >/dev/null 2>&1 8>&- 9>&- &)
+    fi
+    json="\"FOREVER_REF\":$(js "$built")"
+    if [ "$newest" = "$built" ]; then
+        while read -r key value; do
+            case $key in
+            newest | date | title | checked) json+=",$(js "$key"):$(js "$value")" ;;
+            behind) json+=",\"behind\":${value:-0}" ;;
+            world) json+=",\"newWorld\":$([ "$value" = yes ] && echo true || echo false)" ;;
+            esac
+        done <$fd/.newest
+    fi
+    for key in UPDATED PREVIOUS_REF; do
+        value=$(sed -n "s/^$key=//p" $fd/.refs 2>/dev/null || true)
+        [ -n "$value" ] || continue
+        # Going back needs the old image and the databases saved at the update.
+        if [ $key = PREVIOUS_REF ]; then
+            local backup
+            backup=$(sed -n 's/^BACKUP=//p' $fd/.refs)
+            docker image inspect $fp:previous >/dev/null 2>&1 && [ -f "$fd/$backup" ] || continue
+        fi
+        json+=",$(js "$key"):$(js "$value")"
+    done
+    step=$(cat $fd/.update-step 2>/dev/null || true)
+    if [ -f $fd/.update-pid ] && kill -0 "$(cat $fd/.update-pid)" 2>/dev/null; then update=running
+    elif [ -f $fd/.update-failed ]; then update=failed; fi
+    [ -z "$update" ] || json+=",\"update\":\"$update\",\"step\":$(js "$step"),\"updateTime\":$(stat -c %Y $fd/.update-step 2>/dev/null || echo 0)"
+    printf '{%s}' "$json"
+}
+
 # WoW Forever (Karrz1's forever-bots): its own ports, so it runs beside the other two. Its bots
 # wake around the players, up to BOTS; the world server logs how many are in the world each minute.
 forever() {
@@ -278,7 +333,7 @@ forever() {
 {"state":"$state","services":{"bnetserver":$(js "$bnet"),"worldserver":$(js "$world"),"database":$(js "$database")},
 "since":$(js "$since"),"players":$players,"bots":$bots,"botLevels":$levels,"botPositions":[${dots}],
 "game":{"cpu":$c,"memory":$m},"databaseMemory":${mem[$fp-database]:-0},
-"software":{"FOREVER_REF":$(js "$(sed -n 's/^ARG FOREVER_REF=//p' $fd/Dockerfile 2>/dev/null || true)")},"settings":{${settings}},"errors":$errors,
+"software":$(fsoftware),"settings":{${settings}},"errors":$errors,
 "ai":$ai,"aiKey":$key}
 EOF
 }
@@ -319,6 +374,10 @@ run() {
     "forever start") $fd/home-compose up -d database worldserver bnetserver chat ;;
     "forever stop") $fd/home-compose stop chat bnetserver worldserver database ;;
     "forever restart") $fd/home-compose up -d database && $fd/home-compose up -d --force-recreate worldserver bnetserver chat ;;
+    # The update and the way back run on, detached, for most of an hour: the server shows as busy.
+    "forever update") $fd/home-update start ;;
+    "forever back") $fd/home-update start-back ;;
+    "forever check") $fd/home-update check >/dev/null && echo checked ;;
     *) echo "no such action: $1 $2"; return 2 ;;
     esac
 }
@@ -403,7 +462,8 @@ tick() {
             case $name in
             classic-start | classic-stop | classic-restart | classic-backup | classic-settings | \
                 pandaria-start | pandaria-stop | pandaria-restart | pandaria-settings | \
-                forever-start | forever-stop | forever-restart | forever-settings)
+                forever-start | forever-stop | forever-restart | forever-settings | \
+                forever-update | forever-back | forever-check)
                 # In the background, without this tick's lock, so the status goes on.
                 (nohup ./home-status act "${name%%-*}" "${name#*-}" >/dev/null 2>&1 8>&- &)
                 last=$((SECONDS - 10))

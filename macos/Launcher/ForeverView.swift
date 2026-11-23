@@ -77,6 +77,10 @@ struct ForeverPanel: View {
         case .busy(let what):
             busy(what)
 
+        case .updating(let step):
+            busy("Updating the server: \(step)")
+            note("The update runs on the home server, started from its dashboard. Play waits until it ends.")
+
         case .starting:
             busy("Starting: the world and its bots are loading…")
 
@@ -359,6 +363,8 @@ struct ForeverSettings: View {
                             .help("Read the game data from the client again, after Battle.net updated it, and send it to the server")
                             .disabled(clientProblem != nil)
                         Button("Show Logs…") { showLogs(.foreverWorld, openWindow) }
+                        Button("Update Log") { showLogs(.foreverUpdate, openWindow) }
+                            .help("The server's updates, started from the home dashboard")
                     }
                     .disabled(forever.isBusy)
                 }
@@ -486,7 +492,7 @@ extension ForeverServer {
     var health: Health {
         switch phase {
         case .running: .up
-        case .checking, .busy, .settingUp, .starting: .working
+        case .checking, .busy, .settingUp, .updating, .starting: .working
         case .stopped, .unreachable, .noDocker, .failed, .needsData: .down
         case .notConnected, .notSetUp: .off
         }
@@ -500,6 +506,7 @@ extension ForeverServer {
         case .noDocker: "No Docker on the server"
         case .notSetUp: "Not set up"
         case .settingUp(let step): "Setting up: \(step)"
+        case .updating(let step): "Updating: \(step)"
         case .needsData: "Waiting for the game data"
         case .busy(let what): what
         case .starting: "Starting: the world is loading"
@@ -515,7 +522,7 @@ private struct ForeverPolling: ViewModifier {
 
     private var following: Bool {
         switch forever.phase {
-        case .settingUp, .starting: true
+        case .settingUp, .updating, .starting: true
         default: false
         }
     }

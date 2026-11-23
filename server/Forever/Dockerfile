@@ -5,17 +5,19 @@
 #   the default target   bnetserver, worldserver and their tools, for the home server
 #   --target tools       the map readers alone, built on the Mac, where the client is (`mac-extract`)
 #
-# Pinned to a commit of forever-bots; `FOREVER_REF` moves it. The world database is the release
-# that commit names in `revision_data.h.in.cmake`.
+# Pinned to a commit of forever-bots; `FOREVER_REF` moves it (`home-update` builds with the newest).
+# The world database is the release that commit names in `revision_data.h.in.cmake`. The image
+# carries the commit as its `hearthside.forever.ref` label.
 
 ARG UBUNTU=ubuntu:24.04
+ARG FOREVER_REF=7509ecbfcc1bf765f2c034443f20ef601ae5b926
 
 FROM ${UBUNTU} AS source
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
         build-essential clang cmake git ca-certificates libmysqlclient-dev libssl-dev libbz2-dev \
         libreadline-dev libncurses-dev libboost-all-dev \
     && rm -rf /var/lib/apt/lists/*
-ARG FOREVER_REF=51b5ae0971fadf2e96a16b4730e986cc33e29adb
+ARG FOREVER_REF
 RUN git init -q /src && cd /src && git remote add origin https://github.com/Karrz1/TrinityCore.git \
     && git fetch -q --depth 1 origin ${FOREVER_REF} && git checkout -q FETCH_HEAD
 # CascLib opens the client's files read-write, which a read-only mount of the client refuses: the
@@ -59,9 +61,13 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
         ca-certificates curl p7zip-full \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=source /src/revision_data.h.in.cmake /tmp/
-ARG TDB=forever-tdb-2026-10-14/TDB_full_forever_2026_10_14.7z
-RUN mkdir /tdb && cd /tdb \
-    && curl -fsSL --retry 3 -o tdb.7z "https://github.com/Karrz1/TrinityCore/releases/download/${TDB}" \
+# The release named for its date: TDB_full_world_forever_2026_10_14.sql comes in the release
+# forever-tdb-2026-10-14, as TDB_full_forever_2026_10_14.7z. TDB, as `<tag>/<file>`, overrides it.
+ARG TDB=
+RUN d=$(sed -n 's/^#define DATABASE_FULL_DATABASE *"TDB_full_world_forever_\(.*\)\.sql"/\1/p' /tmp/revision_data.h.in.cmake) \
+    && tdb=${TDB:-forever-tdb-$(echo "$d" | tr _ -)/TDB_full_forever_$d.7z} \
+    && mkdir /tdb && cd /tdb \
+    && curl -fsSL --retry 3 -o tdb.7z "https://github.com/Karrz1/TrinityCore/releases/download/$tdb" \
     && 7z e -y tdb.7z '*.sql' -r >/dev/null && rm tdb.7z \
     # The dump's views name their definer, an account this database does not have.
     && sed -i -E 's#/\*!50013 DEFINER=`[^`]*`@`[^`]*` SQL SECURITY DEFINER \*/##' *.sql \
@@ -96,5 +102,7 @@ COPY --from=source /src/sql /src/sql
 COPY --from=source /src/src/modules/PlayerbotV2/sql /src/src/modules/PlayerbotV2/sql
 COPY --from=database /tdb/ /opt/forever/bin/
 COPY forever-start forever-install /usr/local/bin/
+ARG FOREVER_REF
+LABEL hearthside.forever.ref=${FOREVER_REF}
 ENV LD_LIBRARY_PATH=/opt/forever/lib
 WORKDIR /opt/forever/bin

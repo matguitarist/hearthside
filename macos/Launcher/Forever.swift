@@ -23,6 +23,8 @@ final class ForeverServer: ObservableObject {
         case settingUp(String)
         /// The server waits for the game data read on this Mac.
         case needsData
+        /// An update of the server's software runs on the server (the dashboard's Update), at this step.
+        case updating(String)
         /// A step the launcher waits for: copying, reading the data, start, stop.
         case busy(String)
         case starting
@@ -57,7 +59,7 @@ final class ForeverServer: ObservableObject {
     let adminLevel = 3
     /// The recipe's files the server needs; the Mac-side scripts run from the app.
     private static let scripts = ["Dockerfile", "compose.yaml", "forever-start", "forever-install", "forever-extract",
-                                  "home-compose", "home-setup"]
+                                  "home-compose", "home-setup", "home-update"]
 
     private var home: HomeServer { .shared }
     private var setUpDone = false
@@ -79,7 +81,7 @@ final class ForeverServer: ObservableObject {
     }
     var isBusy: Bool {
         switch phase {
-        case .busy, .checking: true
+        case .busy, .checking, .updating: true
         default: false
         }
     }
@@ -121,6 +123,10 @@ final class ForeverServer: ObservableObject {
             phase = status["data"] == "yes" ? .settingUp(step) : .needsData
         case "failed":
             phase = .failed("The setup stopped at: \(step) Show Log has its output.")
+        case "done" where status["update"] == "running":
+            // Its scripts are left as they are until it ends.
+            phase = .updating(status["updatestep"].map { $0.isEmpty ? "Starting…" : $0 } ?? "Starting…")
+            bots = nil
         case "done":
             await syncScripts()
             if status["data"] != "yes" {
@@ -147,6 +153,8 @@ final class ForeverServer: ObservableObject {
             elif [ -f .setup-failed ]; then echo state=failed
             else echo state=none; fi
             echo "step=$(cat .setup-step 2>/dev/null)"
+            if [ -f .update-pid ] && kill -0 "$(cat .update-pid)" 2>/dev/null; then echo update=running; fi
+            echo "updatestep=$(cat .update-step 2>/dev/null)"
             if [ -f storage/data/vmaps/GameObjectModels.dtree ] && ls storage/data/mmaps 2>/dev/null | grep -q mmtile; then echo data=yes; fi
             for s in database:database bnetserver:auth worldserver:world; do
               echo "${s%%:*}=$(docker inspect -f '{{.State.Status}}' \(p)-${s#*:} 2>/dev/null)"
@@ -389,6 +397,7 @@ final class ForeverServer: ObservableObject {
         case .foreverLogin: file = "\(folder)/storage/logs/Bnet.log"
         case .foreverDatabase: file = "\(folder)/storage/logs/DBErrors.log"
         case .foreverSetup: file = "\(folder)/setup.log"
+        case .foreverUpdate: file = "\(folder)/update.log"
         default: return ""
         }
         return try await home.ssh("tail -n \(lines) \(file) 2>/dev/null; true", quiet: true)
@@ -410,6 +419,7 @@ final class ForeverServer: ObservableObject {
                 preparing = "Preparing the client: a copy that signs in to your server…"
                 try await ForeverClient.prepare()
             }
+            try await acceptClientBuild()
             preparing = "Signing in…"
             try await script("forever-login", [email], stdin: password + "\n")
             return true
@@ -417,6 +427,27 @@ final class ForeverServer: ObservableObject {
             clientError = LocalServer.message(error)
             return false
         }
+    }
+
+    /// After Battle.net updated the game, the server lets its new build in: the build goes into
+    /// ACCEPT_BUILDS in the server's `.env` (`forever-start` adds it to the realm's list and to
+    /// `build_info`), and the login and world servers restart with it, a few minutes. A build the
+    /// running server already lets in costs one look.
+    private func acceptClientBuild() async throws {
+        guard let original = ForeverClient.original, let version = ForeverClient.build(original),
+              let build = version.split(separator: ".").last.flatMap({ Int($0) }) else { return }
+        let accepted = try await home.ssh(
+            "docker exec \(Self.project)-world sed -n 's/^Realm.AlsoAcceptBuilds *= *//p' /opt/forever/etc/worldserver.conf",
+            quiet: true)
+        let builds = accepted.components(separatedBy: CharacterSet.decimalDigits.inverted).compactMap { Int($0) }
+        guard !builds.isEmpty, !builds.contains(build) else { return }
+        preparing = "Letting your client's new build (\(build)) in: the server restarts, a few minutes…"
+        try await home.ssh("""
+            cd \(folder) && b=$(sed -n 's/^ACCEPT_BUILDS=//p' .env) && sed -i '/^ACCEPT_BUILDS=/d' .env \
+            && echo "ACCEPT_BUILDS=${b:+$b,}\(build)" >> .env
+            """)
+        try await compose("up -d --force-recreate worldserver bnetserver")
+        try await waitReady(minutes: 20)
     }
 
     func prepareAgain() async {

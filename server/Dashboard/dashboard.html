@@ -261,8 +261,11 @@ const NAMES = {classic: "Classic", pandaria: "Pandaria", forever: "Forever"};
 const SERVERS = Object.keys(NAMES);
 const STATES = {up: ["up", "Running"], starting: ["working", "Starting"], busy: ["working", "Setting up or updating"],
                 stopped: ["down", "Stopped"], missing: ["down", "Not set up"]};
-const DOING = {start: "Starting", stop: "Stopping", restart: "Restarting", backup: "Backing up", settings: "Applying the settings to"};
-const DONE = {start: "Started", stop: "Stopped", restart: "Restarted", backup: "Backed up", settings: "Applied the settings to"};
+const DOING = {start: "Starting", stop: "Stopping", restart: "Restarting", backup: "Backing up", settings: "Applying the settings to",
+               update: "Starting the update of", back: "Starting to put back", check: "Checking for updates to"};
+const DONE = {start: "Started", stop: "Stopped", restart: "Restarted", backup: "Backed up", settings: "Applied the settings to",
+              update: "Started the update of", back: "Started putting back", check: "Checked for updates to"};
+const FAILED = {settings: "apply the settings to", update: "start the update of", back: "put back", check: "check for updates to"};
 // Each 1.12 continent's world map, as WorldMapArea.dbc bounds it: the y at its left and right
 // edges, the x at its top and bottom (the world's x runs north, its y west). Forever's two
 // continents are these, at the same places; Pandaria's come with its status, read from its own client.
@@ -366,7 +369,7 @@ function drawAction(s) {
   } else if (a && a.finished && Date.now() / 1000 - a.finished < 600) {
     el.hidden = false;
     if (a.state === "failed") el.className = "action failed";
-    el.innerHTML = (a.state === "failed" ? `Couldn't ${esc(a.action === "settings" ? "apply the settings to" : a.action)} ${NAMES[a.server]}`
+    el.innerHTML = (a.state === "failed" ? `Couldn't ${esc(FAILED[a.action] || a.action)} ${NAMES[a.server]}`
                                          : `${DONE[a.action]} ${NAMES[a.server]}`) +
       ` ${ago(a.finished)}.` + (a.state === "failed" && a.output.length ? `<pre>${a.output.map(esc).join("\n")}</pre>` : "");
   } else {
@@ -442,8 +445,9 @@ function draw() {
 
   const [cls, label] = STATES[g.state];
   $("dot").className = "dot " + cls;
-  $("state").textContent = `${NAMES[shown]}: ${label}`;
-  $("state-sub").textContent = (g.state === "up" && s.address ? `at ${s.address}` : "") +
+  const sw = g.software || {}, updating = sw.update === "running";
+  $("state").textContent = `${NAMES[shown]}: ${updating ? "Updating" : label}`;
+  $("state-sub").textContent = updating ? sw.step || "" : (g.state === "up" && s.address ? `at ${s.address}` : "") +
     (g.since && (g.state === "up" || g.state === "starting") ? ` · since ${new Date(g.since).toLocaleString()}` : "");
   document.title = `Azeroth servers · ${NAMES[shown]} ${label.toLowerCase()}`;
 
@@ -505,11 +509,11 @@ function draw() {
   $("settings-card").classList.toggle("half", shown === "classic" && !editing);
   drawSettings(g);
 
-  const sw = g.software || {}, ref = k => `<code>${esc((sw[k] || "").slice(0, 7))}</code>`;
+  const ref = k => `<code>${esc((sw[k] || "").slice(0, 7))}</code>`;
   $("software").innerHTML = shown === "classic"
     ? `CMaNGOS ${ref("CMANGOS_REF")} · playerbots ${ref("PLAYERBOTS_REF")} · classic-db ${ref("CLASSICDB_REF")}` +
       (g.updated_software ? ` · updated ${new Date(g.updated_software).toLocaleDateString()}` : "")
-    : shown === "forever" ? `WoW Forever · Karrz1's forever-bots ${ref("FOREVER_REF")}`
+    : shown === "forever" ? foreverSoftware(g, s)
     : `Mists of Pandaria 5.4.8 · LoA-Pandaria-Playerbots ${ref("PANDARIA_REF")}`;
 
   const errors = g.errors || [];
@@ -519,6 +523,38 @@ function draw() {
   $("errors-sub").textContent = shown === "forever" ? "The auction house bot's sales are left out."
     : "The bots' harmless " + (shown === "classic" ? "pathing, cooldown and spell" : "combat") + " messages are left out.";
 }
+
+// Forever's server software: the forever-bots commit it runs, the newest one with its Update button,
+// the update in progress or how it failed, and Go back after an update (`home-update` on the server).
+function foreverSoftware(g, s) {
+  const sw = g.software || {}, short = r => `<code>${esc((r || "").slice(0, 7))}</code>`;
+  const busy = !!pending(s) || g.state === "busy" || g.state === "missing", can = session.signedIn;
+  const button = (action, text, primary) =>
+    can ? ` <button class="btn small${primary ? " primary" : ""}" data-software="${action}"${busy ? " disabled" : ""}>${text}</button>` : "";
+  let html = `WoW Forever · Karrz1's forever-bots ${short(sw.FOREVER_REF)}` +
+    (sw.UPDATED ? ` · updated ${new Date(sw.UPDATED).toLocaleDateString()}` : "");
+  if (sw.update === "running") {
+    html += `<div class="note" style="margin-top:6px">Updating: ${esc(sw.step || "starting…")} The game is up until the new server is built, then down for a few minutes.</div>`;
+  } else if (sw.update === "failed") {
+    html += `<div class="action failed">The last update stopped at: ${esc(sw.step || "?")} The server was put back as it was. Its log is update.log in the server's folder.</div>`;
+  }
+  if (sw.newest && sw.newest !== sw.FOREVER_REF && sw.update !== "running") {
+    const when = sw.date ? new Date(sw.date).toLocaleDateString() : "";
+    html += `<div style="margin-top:6px"><b>Newer:</b> ${esc(sw.title || sw.newest.slice(0, 7))}` +
+      ` <span class="note">(${short(sw.newest)}, ${when}${sw.behind ? `, ${sw.behind} changes` : ""}` +
+      `${sw.newWorld ? ", with a new world database" : ""})</span>${button("update", "Update…", true)}</div>`;
+  } else if (sw.newest && sw.update !== "running") {
+    html += `<div class="note" style="margin-top:6px">The newest forever-bots${sw.checked ? `, checked ${ago(Date.parse(sw.checked) / 1000)}` : ""}.${button("check", "Check now")}</div>`;
+  }
+  if (sw.PREVIOUS_REF && sw.update !== "running") {
+    html += `<div class="note" style="margin-top:6px">Before the last update: ${short(sw.PREVIOUS_REF)}.${button("back", "Go back…")}</div>`;
+  }
+  return html;
+}
+$("software").addEventListener("click", e => {
+  const b = e.target.closest("button[data-software]");
+  if (b) ask(b.dataset.software);
+});
 
 // Forever's bot bridge: the AI chat's spending and last lines, and the bots' problems
 // (`bridge-report` in the chat container, through `home-status`).
@@ -600,6 +636,12 @@ async function ask(action) {
     restart: `Restart ${NAMES[server]}? Anyone playing is disconnected for a few minutes.`,
     start: other && (s[other].state === "up" || s[other].state === "starting")
       ? `Start ${NAMES[server]}? ${NAMES[other]} stops first: the two servers share their ports.` : null,
+    update: `Update ${NAMES[server]} to "${(s[server].software || {}).title || "the newest forever-bots"}"?\n\n` +
+      "The new server is built first while this one keeps running: most of an hour. Then the game stops for a few minutes: " +
+      "every database is saved, and the new server updates them. Accounts and characters are kept. If anything fails, the server is put back as it was.",
+    back: `Go back to the server from before the last update?\n\n` +
+      "Its databases go back to the moment the update stopped the game: whatever was played since is lost. " +
+      "The current databases are saved first. Anyone playing is disconnected for a few minutes.",
   };
   if (questions[action] && !confirm(questions[action])) return;
   await post("action", {server, action}, {server, action});

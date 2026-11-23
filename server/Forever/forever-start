@@ -5,14 +5,15 @@
 #
 #   LAN_IP          the address players reach (the realm's, and the login name's inside the network)
 #   WORLD_PORT      the world's port on that address
-#   ACCEPT_BUILDS   client builds let in besides the realm's own (ForeverCore keeps it on 70707)
+#   ACCEPT_BUILDS   more client builds to let in, besides the realm's own (ForeverCore keeps it on
+#                   70707) and those below; the launcher adds the Mac client's when Battle.net updates it
 #   LOGIN_DEBUG     1: the login's every connection and request in Bnet.log
 #   BOTS            most world bots at once; RATE_* the usual rates; MAP_THREADS the map threads
 #   AI_CHAT         1: the bots talk through a language model (the chat container; AI_CHAT_* below)
 set -euo pipefail
 etc=/opt/forever/etc
 : "${LAN_IP:?}" "${WORLD_PORT:?}"
-builds=${ACCEPT_BUILDS:-70862,70888,70938}
+builds=$(echo "70862,70888,70938,70959,71037,${ACCEPT_BUILDS:-}" | tr ',' '\n' | grep -E '^[0-9]+$' | sort -un | paste -sd, -)
 db() { echo "\"database;3306;forever;forever;$1\""; }
 
 # `set_key <file> <key> <value>`: the key's line set to the value, or added at the end.

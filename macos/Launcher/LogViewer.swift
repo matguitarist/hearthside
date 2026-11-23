@@ -59,7 +59,7 @@ enum LogSource: String, CaseIterable, Identifiable, Hashable {
     case game, gamePrevious, localServer, localCommands
     case homeServer, homeRealm, homeDatabase, homeSetup, homeUpdate
     case pandariaWorld, pandariaLogin, pandariaDatabase, pandariaSetup
-    case foreverWorld, foreverLogin, foreverDatabase, foreverSetup
+    case foreverWorld, foreverLogin, foreverDatabase, foreverSetup, foreverUpdate
 
     var id: String { rawValue }
 
@@ -82,6 +82,7 @@ enum LogSource: String, CaseIterable, Identifiable, Hashable {
         case .foreverLogin: "Login server"
         case .foreverDatabase: "Database errors"
         case .foreverSetup: "Setup"
+        case .foreverUpdate: "Updates"
         }
     }
 
@@ -93,7 +94,7 @@ enum LogSource: String, CaseIterable, Identifiable, Hashable {
         case .homeRealm, .pandariaLogin, .foreverLogin: "person.badge.key"
         case .homeDatabase, .pandariaDatabase, .foreverDatabase: "cylinder.split.1x2"
         case .homeSetup, .pandariaSetup, .foreverSetup: "hammer"
-        case .homeUpdate: "arrow.triangle.2.circlepath"
+        case .homeUpdate, .foreverUpdate: "arrow.triangle.2.circlepath"
         }
     }
 
@@ -102,7 +103,7 @@ enum LogSource: String, CaseIterable, Identifiable, Hashable {
         case .game, .gamePrevious: "Game"
         case .localServer, .localCommands: "Server on this Mac"
         case .pandariaWorld, .pandariaLogin, .pandariaDatabase, .pandariaSetup: "Pandaria"
-        case .foreverWorld, .foreverLogin, .foreverDatabase, .foreverSetup: "Forever"
+        case .foreverWorld, .foreverLogin, .foreverDatabase, .foreverSetup, .foreverUpdate: "Forever"
         default: "Home server"
         }
     }
@@ -129,6 +130,7 @@ enum LogSource: String, CaseIterable, Identifiable, Hashable {
         case .foreverLogin: "Bnet.log"
         case .foreverDatabase: "DBErrors.log"
         case .foreverSetup: "setup.log"
+        case .foreverUpdate: "update.log"
         }
     }
 
@@ -312,7 +314,7 @@ enum LogReader {
                 // TrinityCore writes its files without a time or a level.
                 from = source == .pandariaLogin ? "authserver" : source == .foreverLogin ? "bnetserver" : "worldserver"
                 level = source == .pandariaDatabase || source == .foreverDatabase ? .error : guess(line)
-            case .homeSetup, .homeUpdate, .pandariaSetup, .foreverSetup:
+            case .homeSetup, .homeUpdate, .pandariaSetup, .foreverSetup, .foreverUpdate:
                 if let m = match(step, line) {
                     time = m[0]; from = "step"; message = m[1]; level = guess(m[1]) == .error ? .error : .info
                 } else {
@@ -551,6 +553,7 @@ private struct LogView: View {
         case .pandariaSetup: "Pandaria has no setup log on the home server."
         case .pandariaWorld, .pandariaLogin: "Start Pandaria (Settings › Pandaria) to see its log."
         case .foreverSetup: "Forever has no setup log on the home server."
+        case .foreverUpdate: "No update has run on Forever yet: the home dashboard offers them."
         case .foreverWorld, .foreverLogin: "Start Forever (Settings › Forever) to see its log."
         default: "Nothing in this log yet."
         }

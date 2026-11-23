@@ -1,0 +1,250 @@
+#!/bin/bash
+# Moves the Forever server on the home server to the newest forever-bots (Karrz1/TrinityCore),
+# keeping every account and character, and back again. The dashboard's buttons start it through
+# `home-status`, detached, as `home-setup` is: `.update-step` holds the step in progress, then
+# `.update-done` or `.update-failed`; the output goes to `update.log`.
+#
+#   home-update check       the built and the newest commit, into `.newest` for the dashboard and
+#                           printed: `built <sha>`, `newest <sha>`, `date <time>`, `title <line>`,
+#                           `behind <commits>`, `world <yes|no>` (a new world database release)
+#   home-update start       `run` in the background
+#   home-update run [sha]   the update, to the newest commit or the one given
+#   home-update start-back  `back` in the background
+#   home-update back        the server from before the last update, with its databases as they were
+#                           when the update stopped the game; what was played since is lost
+#
+# The new server is built while the old one runs: most of an hour, as the build cache keeps what
+# did not change. Then the game stops, every database is saved (`storage/backups/`), and the new
+# server starts; its updater brings the databases forward from `sql/`, and a new world database
+# release (`revision_data.h.in.cmake`) is loaded in place of the old one, which holds no player
+# data. The old images stay as `:previous` for `back`. Anything failing once the game stopped
+# puts back the old images and the saved databases. A server that was stopped is stopped again.
+set -euo pipefail
+# Failures inside `$(…)` count too: a backup that failed must stop the update.
+shopt -s inherit_errexit
+cd "$(dirname "$0")"
+p=hearthside-forever
+repo=Karrz1/TrinityCore
+branch=forever-bots
+images=("$p:1" "$p-chat:1")
+dc() { ./home-compose "$@"; }
+dbx() { docker exec -i -e MYSQL_PWD=password "$p-database" "$@"; }
+
+# What the image was built from: its label, else `.refs` after an update, else the recipe's pin.
+built() {
+    local v
+    v=$(docker image inspect -f '{{index .Config.Labels "hearthside.forever.ref"}}' "$p:1" 2>/dev/null || true)
+    [ -n "$v" ] && [ "$v" != "<no value>" ] || v=$(sed -n 's/^FOREVER_REF=//p' .refs 2>/dev/null)
+    [ -n "$v" ] || v=$(sed -n 's/^ARG FOREVER_REF=//p' Dockerfile)
+    echo "$v"
+}
+api() { curl -fsSL --retry 2 -H 'Accept: application/vnd.github+json' "https://api.github.com/repos/$repo/$1"; }
+newest() { curl -fsSL --retry 2 -H 'Accept: application/vnd.github.sha' "https://api.github.com/repos/$repo/commits/$branch"; }
+# The world database release a commit names.
+release() {
+    curl -fsSL --retry 2 "https://raw.githubusercontent.com/$repo/$1/revision_data.h.in.cmake" |
+        sed -n 's/^#define DATABASE_FULL_DATABASE *"\(.*\)"/\1/p'
+}
+sha() { [[ $1 =~ ^[0-9a-f]{40}$ ]]; }
+set_ref() { touch .refs; sed -i "/^$1=/d" .refs; [ -z "$2" ] || echo "$1=$2" >>.refs; }
+
+check() {
+    local from to info date title behind world=no
+    from=$(built)
+    to=$(newest)
+    sha "$to" || { echo "no newest commit: $to" >&2; return 1; }
+    info=$(api "commits/$to")
+    # The commit's own date and its message's first line, without jq.
+    date=$(sed -n 's/^ *"date": "\(.*\)",\{0,1\}$/\1/p' <<<"$info" | sed -n 2p)
+    title=$(sed -n 's/^ *"message": "\(.*\)",\{0,1\}$/\1/p' <<<"$info" | head -n 1 | sed -e 's/\\n.*//' -e 's/\\"/"/g')
+    behind=0
+    if [ "$from" != "$to" ]; then
+        behind=$(api "compare/$from...$to?per_page=1" | sed -n 's/^ *"ahead_by": \([0-9]*\),$/\1/p' | head -n 1)
+        [ "$(release "$from")" = "$(release "$to")" ] || world=yes
+    fi
+    printf 'built %s\nnewest %s\ndate %s\ntitle %s\nbehind %s\nworld %s\nchecked %s\n' \
+        "$from" "$to" "$date" "$title" "${behind:-0}" "$world" "$(date -u +%FT%TZ)" | tee .newest.part
+    mv .newest.part .newest
+}
+
+case "${1:-}" in
+check) check; exit 0 ;;
+start | start-back)
+    [ ! -f .update-pid ] || ! kill -0 "$(cat .update-pid)" 2>/dev/null || { echo "an update is running"; exit 1; }
+    [ "$1" = start ] && what=run || what=back
+    rm -f .update-done .update-failed .update-step
+    echo "Starting…" >.update-step
+    (nohup ./home-update "$what" "${@:2}" >>update.log 2>&1 </dev/null &)
+    exit 0
+    ;;
+run | back) ;;
+*)
+    echo "usage: home-update check|start|run [sha]|start-back|back" >&2
+    exit 2
+    ;;
+esac
+
+echo $$ >.update-pid
+rm -f .update-done .update-failed
+mode=$1
+stopped=0
+was_running=0
+saved=""
+undo=()
+step() { echo "$1" >.update-step; echo "== $(date '+%F %T') $1" >&2; shift; "$@"; }
+log() { echo "== $(date '+%F %T') $*" >&2; }
+
+ready() {
+    local ip port _
+    ip=$(sed -n 's/^LAN_IP=//p' .env) port=$(sed -n 's/^WORLD_PORT=//p' .env)
+    for _ in $(seq 1 240); do
+        if timeout 2 bash -c "</dev/tcp/$ip/${port:-8105}" 2>/dev/null && timeout 2 bash -c "</dev/tcp/$ip/1119" 2>/dev/null; then
+            return 0
+        fi
+        for c in world auth; do
+            [ "$(docker inspect -f '{{.State.Running}}' "$p-$c" 2>/dev/null)" = true ] ||
+                { echo "the $c server stopped while starting; its log is storage/logs/" >&2; return 1; }
+        done
+        sleep 10
+    done
+    echo "the server did not come up in 40 minutes" >&2
+    return 1
+}
+
+# The database up and taking the root password. Healthy is not enough: on an empty volume MySQL
+# first runs a temporary server for its setup, which answers the health check and nothing else.
+database_up() {
+    dc up -d database >/dev/null
+    local _
+    for _ in $(seq 1 150); do
+        [ "$(docker inspect -f '{{.State.Health.Status}}' "$p-database" 2>/dev/null)" = healthy ] &&
+            dbx mysql -uroot -N -B -e 'SELECT 1' >/dev/null 2>&1 && return 0
+        sleep 2
+    done
+    echo "the database did not start" >&2
+    return 1
+}
+
+# Forever's databases are there: an empty one means the server was never set up on this volume,
+# and an update would only hide that.
+set_up() {
+    [ "$(dbx mysql -uroot -N -B -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'auth' AND table_name = 'realmlist'")" = 1 ] ||
+        { echo "Forever's database is empty: set Forever up again (Set Up Forever in the launcher) before updating" >&2; return 1; }
+}
+
+# Every database of the server into `storage/backups/<name>.sql.gz`; the last five are kept.
+save() {
+    local dbs file=storage/backups/$1.sql.gz
+    mkdir -p storage/backups
+    dbs=$(dbx mysql -uroot -N -B -e "SELECT schema_name FROM information_schema.schemata WHERE schema_name IN ('auth','characters','world','hotfixes','playerbot')")
+    # shellcheck disable=SC2086
+    dbx mysqldump -uroot --single-transaction --routines --events --triggers --add-drop-database --databases $dbs |
+        gzip -1 >"$file.part"
+    # mysqldump ends a whole dump with this line; anything less is no backup.
+    gunzip -c "$file.part" | tail -n 1 | grep -q '^-- Dump completed' || { echo "the backup is incomplete" >&2; return 1; }
+    mv "$file.part" "$file"
+    chmod 600 "$file"
+    ls -1t storage/backups/*.sql.gz 2>/dev/null | tail -n +6 | xargs -r rm -f
+    echo "$file"
+}
+restore() { gunzip -c "$1" | dbx mysql -uroot; }
+
+swap_images() { # <from tag> <to tag>: each image's <from> tagged <to>
+    local i
+    for i in "${images[@]}"; do docker tag "${i%:*}:$1" "${i%:*}:$2"; done
+}
+
+finish() {
+    local ok=$?
+    if [ $ok -ne 0 ] && [ ! -f .update-done ]; then
+        log "failed"
+        if [ $stopped = 1 ]; then
+            echo "Putting back the server as it was…" >.update-step
+            log "putting back the server as it was"
+            "${undo[@]}" || true
+            if [ -n "$saved" ]; then database_up && restore "$saved" || true; fi
+            if [ $was_running = 1 ]; then dc up -d database worldserver bnetserver chat || true; fi
+        fi
+        touch .update-failed
+    fi
+    rm -f .update-pid
+}
+trap finish EXIT
+
+[ "$(docker inspect -f '{{.State.Running}}' "$p-world" 2>/dev/null)" = true ] && was_running=1
+stamp=$(date +%Y%m%d-%H%M%S)
+
+if [ "$mode" = run ]; then
+    from=$(built)
+    to=${2:-$(newest)}
+    sha "$to" || { echo "no commit to update to: $to"; exit 1; }
+    if [ "$from" = "$to" ]; then
+        log "already at $to"
+        touch .update-done
+        exit 0
+    fi
+    new_world=0
+    [ "$(release "$from")" = "$(release "$to")" ] || new_world=1
+    log "from $from to $to; new world database release: $new_world"
+    step "Checking the database…" database_up
+    set_up
+    # The old images become `:previous`, for `back` and for a failure below; the build retags `:1`.
+    for i in "${images[@]}"; do
+        docker image inspect "$i" >/dev/null 2>&1 || { echo "no image $i: set the server up first"; exit 1; }
+        docker rmi "${i%:*}:previous" >/dev/null 2>&1 || true
+        docker tag "$i" "${i%:*}:previous"
+    done
+    step "Building the new server from source (most of an hour)…" \
+        docker buildx build --load --build-arg "FOREVER_REF=$to" -t "$p:1" .
+    step "Building the bots' chat…" \
+        docker buildx build --load --build-arg "FOREVER_REF=$to" --target chat -t "$p-chat:1" .
+
+    stopped=1
+    undo=(swap_images previous 1)
+    step "Stopping the game…" dc stop chat bnetserver worldserver
+    saved=$(step "Saving every database…" save "update-$stamp")
+    log "saved $saved"
+    if [ $new_world = 1 ]; then
+        # Emptied, the worldserver loads the new release into them at its start (`Updates.AutoSetup`).
+        step "Making room for the new world database…" dbx mysql -uroot -e \
+            "DROP DATABASE world; CREATE DATABASE world DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+             DROP DATABASE hotfixes; CREATE DATABASE hotfixes DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+    fi
+    step "Starting the new server: it updates its databases first…" dc up -d database worldserver bnetserver chat
+    step "Waiting for the world to open…" ready
+    set_ref FOREVER_REF "$to"
+    set_ref PREVIOUS_REF "$from"
+    set_ref BACKUP "$saved"
+    set_ref UPDATED "$(date -u +%FT%TZ)"
+else
+    prev=$(sed -n 's/^PREVIOUS_REF=//p' .refs 2>/dev/null)
+    backup=$(sed -n 's/^BACKUP=//p' .refs 2>/dev/null)
+    [ -n "$prev" ] && [ -f "$backup" ] && docker image inspect "$p:previous" >/dev/null 2>&1 ||
+        { echo "there is no server from before the last update to go back to"; exit 1; }
+    gunzip -c "$backup" | tail -n 1 | grep -q '^-- Dump completed' || { echo "the backup from the update is incomplete: $backup"; exit 1; }
+    now=$(built)
+    log "back from $now to $prev, with $backup"
+    step "Checking the database…" database_up
+    set_up
+    for i in "${images[@]}"; do docker tag "$i" "${i%:*}:undone"; done
+    stopped=1
+    undo=(swap_images undone 1)
+    step "Stopping the game…" dc stop chat bnetserver worldserver
+    saved=$(step "Saving every database first…" save "before-going-back-$stamp")
+    log "saved $saved"
+    swap_images previous 1
+    step "Putting back the databases from before the update…" restore "$backup"
+    step "Starting the server from before the update…" dc up -d database worldserver bnetserver chat
+    step "Waiting for the world to open…" ready
+    for i in "${images[@]}"; do docker rmi "${i%:*}:previous" "${i%:*}:undone" >/dev/null 2>&1 || true; done
+    set_ref FOREVER_REF "$prev"
+    set_ref PREVIOUS_REF ""
+    set_ref BACKUP ""
+    set_ref UPDATED "$(date -u +%FT%TZ)"
+fi
+
+[ $was_running = 1 ] || step "Stopping the server again, as it was…" dc stop chat bnetserver worldserver database
+rm -f .newest
+touch .update-done
+echo "Done." >.update-step
+log "done"
