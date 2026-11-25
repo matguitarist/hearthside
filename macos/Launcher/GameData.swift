@@ -181,7 +181,8 @@ final class GameData: ObservableObject {
         let tick = Throttle()
 
         // A dropped connection keeps what arrived and resumes after 2, 4, 8, 16, then 30 s, nine tries in all.
-        let options = DownloadOptions(retry: .patient, timeout: 60)
+        // The system's User-Agent, as the launcher's own downloader sent before.
+        let options = DownloadOptions(retry: .patient, timeout: 60, usesSystemUserAgent: true)
         do {
             try await Download.range(zip.url, offset: start, length: entry.compressedSize, appendingTo: packed, options: options) { got in
                 guard tick.ready() else { return }
@@ -190,6 +191,9 @@ final class GameData: ObservableObject {
                     self.report(id, tally.progress())
                 }
             }
+        } catch DownloadError.rateLimited(let until, _) {
+            // The server asked for a longer wait than DownloadKit waits out; the bytes on disk are kept.
+            throw RemoteZip.Failure.rateLimited(zip.url, until: until)
         } catch is DownloadError {
             // Anything but the bytes asked for (a whole file, an error page) would append the wrong bytes.
             throw RemoteZip.Failure.noRanges(zip.url)

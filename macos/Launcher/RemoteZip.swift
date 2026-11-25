@@ -21,12 +21,19 @@ struct RemoteZip {
 
     enum Failure: LocalizedError {
         case noRanges(URL)
+        case rateLimited(URL, until: Date?)
         case notAZip(String)
         case unsupported(String)
 
         var errorDescription: String? {
             switch self {
             case .noRanges(let url): "\(url.host ?? "The server") doesn't support resumable downloads."
+            case .rateLimited(let url, let until):
+                if let until, until > .now {
+                    "\(url.host ?? "The server") asks to wait until \(until.formatted(date: .omitted, time: .shortened)); try again then."
+                } else {
+                    "\(url.host ?? "The server") asks to wait before downloading more; try again later."
+                }
             case .notAZip(let why): "The download isn't a readable zip (\(why))."
             case .unsupported(let why): "The zip uses an unsupported layout (\(why))."
             }
