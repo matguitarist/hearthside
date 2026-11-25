@@ -89,12 +89,16 @@ done
 # --- The launcher ---------------------------------------------------------------------------
 launchers=()
 mkdir -p "$OUT/build"
+# The shared packages it imports (DownloadKit), pinned in tools/swift-kits.sh.
+KITS="$OUT/kits"
+tools/swift-kits.sh "$KITS" $ARCHS
 for arch in $ARCHS; do
     echo "building the launcher for ${arch}…"
     xcrun swiftc -swift-version 5 -O -parse-as-library \
         -target "$arch-apple-macos$MIN_MACOS" \
         -module-name "$EXE" \
         -F "$SPARKLE" -framework Sparkle \
+        -I "$KITS/$arch" -L "$KITS/$arch" $(tools/swift-kits.sh --libs) \
         -Xlinker -rpath -Xlinker @executable_path/../Frameworks \
         macos/Launcher/*.swift -o "$OUT/build/$EXE-$arch"
     launchers+=("$OUT/build/$EXE-$arch")

@@ -81,7 +81,9 @@ jobs:
           curl -fsSL -o sparkle.tar.xz "https://github.com/sparkle-project/Sparkle/releases/download/$v/Sparkle-$v.tar.xz"
           echo "$sum  sparkle.tar.xz" | shasum -a 256 -c -
           tar -xf sparkle.tar.xz -C sparkle
+      - name: The shared Swift packages, as tools/macos-app.sh builds them
+        run: tools/swift-kits.sh kits arm64
       - name: The launcher typechecks
         run: |
           xcrun swiftc -swift-version 5 -parse-as-library -typecheck -target arm64-apple-macos14.0 \
-            -module-name Hearthside -F sparkle macos/Launcher/*.swift
+            -module-name Hearthside -F sparkle -I kits/arm64 macos/Launcher/*.swift

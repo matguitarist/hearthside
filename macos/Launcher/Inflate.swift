@@ -1,5 +1,6 @@
 import Compression
 import CryptoKit
+import DownloadKit
 import Foundation
 
 enum FileOps {
@@ -29,7 +30,7 @@ enum FileOps {
                 consumed += Int64(data.count)
                 progress(consumed)
             }
-            return hash.finalize().hex
+            return SHA256Hex.string(hash.finalize())
         }
 
         // COMPRESSION_ZLIB is raw DEFLATE (RFC 1951), exactly what a zip entry holds.
@@ -71,29 +72,10 @@ enum FileOps {
             progress(consumed)
             if last && !finished { throw InflateError(why: "the data ended early") }
         }
-        return hash.finalize().hex
-    }
-
-    /// SHA-256 of a file in hex; `progress` gets the bytes read.
-    static func sha256(_ url: URL, progress: (Int64) -> Void) throws -> String {
-        let h = try FileHandle(forReadingFrom: url)
-        defer { try? h.close() }
-        var hash = SHA256()
-        var read: Int64 = 0
-        while let data = try h.read(upToCount: chunk * 8), !data.isEmpty {
-            try Task.checkCancellation()
-            hash.update(data: data)
-            read += Int64(data.count)
-            progress(read)
-        }
-        return hash.finalize().hex
+        return SHA256Hex.string(hash.finalize())
     }
 
     static func size(_ url: URL) -> Int64? {
         (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int64) ?? nil
     }
-}
-
-extension SHA256.Digest {
-    var hex: String { map { String(format: "%02x", $0) }.joined() }
 }

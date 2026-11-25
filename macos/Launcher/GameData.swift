@@ -1,3 +1,4 @@
+import DownloadKit
 import Foundation
 
 /// One MPQ the game needs, from data-manifest.tsv.
@@ -96,7 +97,7 @@ final class GameData: ObservableObject {
                     let base = done
                     let tick = Throttle()
                     let sum = try await Task.detached {
-                        try FileOps.sha256(url) { read in
+                        try SHA256Hex.ofFile(url) { read in
                             guard tick.ready() else { return }
                             Task { @MainActor in
                                 self.report(id, Progress(
@@ -179,13 +180,20 @@ final class GameData: ObservableObject {
         let scale = Double(f.size) / Double(max(entry.compressedSize, 1))
         let tick = Throttle()
 
-        try await RangeDownloader(url: zip.url, start: start, length: entry.compressedSize, to: packed) { got in
-            guard tick.ready() else { return }
-            Task { @MainActor in
-                tally.set(f.name, Int64(Double(got) * scale))
-                self.report(id, tally.progress())
+        // A dropped connection keeps what arrived and resumes after 2, 4, 8, 16, then 30 s, nine tries in all.
+        let options = DownloadOptions(retry: .patient, timeout: 60)
+        do {
+            try await Download.range(zip.url, offset: start, length: entry.compressedSize, appendingTo: packed, options: options) { got in
+                guard tick.ready() else { return }
+                Task { @MainActor in
+                    tally.set(f.name, Int64(Double(got.received) * scale))
+                    self.report(id, tally.progress())
+                }
             }
-        }.run()
+        } catch is DownloadError {
+            // Anything but the bytes asked for (a whole file, an error page) would append the wrong bytes.
+            throw RemoteZip.Failure.noRanges(zip.url)
+        }
 
         tally.unpacking(f.name)
         report(id, tally.progress())

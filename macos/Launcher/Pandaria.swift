@@ -1,5 +1,6 @@
 import AppKit
 import CryptoKit
+import DownloadKit
 import Foundation
 
 /// Pandaria: Mists of Pandaria 5.4.8 with playerbots (LoA-Pandaria-Playerbots) on the home server,
@@ -431,7 +432,7 @@ enum PandariaClient {
             guard let data = try? Data(contentsOf: dir.appendingPathComponent(name)) else { return false }
             hash.update(data: data)
         }
-        let digest = hash.finalize().map { String(format: "%02x", $0) }.joined()
+        let digest = SHA256Hex.string(hash.finalize())
         return built.trimmingCharacters(in: .whitespacesAndNewlines) == digest
     }
 

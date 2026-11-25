@@ -1,5 +1,6 @@
 import AppKit
 import CryptoKit
+import DownloadKit
 import Foundation
 import Security
 
@@ -519,7 +520,7 @@ enum ForeverClient {
             guard let data = try? Data(contentsOf: recipe.appendingPathComponent(name)) else { return false }
             hash.update(data: data)
         }
-        let digest = hash.finalize().map { String(format: "%02x", $0) }.joined()
+        let digest = SHA256Hex.string(hash.finalize())
         // As `shasum -a 256` prints it, from standard input.
         return read("keyswap.sources") == "\(digest)  -"
     }
