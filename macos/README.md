@@ -173,7 +173,7 @@ universal build, `SIGN_IDENTITY`, `VERSION`, `BUILD`). The build number Sparkle 
 from the version (1.2.3 → 1002003), so it only ever grows with the version, whatever the history. Without a Developer ID certificate it
 signs ad-hoc: the app runs on the Mac that built it, with updates off.
 
-The launcher imports shared Swift packages (DownloadKit), each pinned to a tag and commit in
+The launcher imports shared Swift packages (DownloadKit, FileKit), each pinned to a tag and commit in
 `tools/swift-kits.sh`, which clones them into `target/macos/kits/` and builds each as a static
 library for every architecture. A new version is a new tag and commit there.
 

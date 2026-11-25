@@ -11,6 +11,7 @@ set -euo pipefail
 # name, tag, commit: a moved tag is refused, as Sparkle's tarball is checked against its SHA-256.
 KITS=(
     "DownloadKit 0.1.0 01e6ef537c2580674c8cbdfdd567c74e5a9b582b"
+    "FileKit 0.1.0 ca394fee2bd07f14e05924340e9bddf2f3ebfe30"
 )
 MIN_MACOS="14.0"
 

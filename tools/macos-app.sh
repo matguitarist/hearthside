@@ -89,7 +89,7 @@ done
 # --- The launcher ---------------------------------------------------------------------------
 launchers=()
 mkdir -p "$OUT/build"
-# The shared packages it imports (DownloadKit), pinned in tools/swift-kits.sh.
+# The shared packages it imports (DownloadKit, FileKit), pinned in tools/swift-kits.sh.
 KITS="$OUT/kits"
 tools/swift-kits.sh "$KITS" $ARCHS
 for arch in $ARCHS; do

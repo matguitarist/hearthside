@@ -1,8 +1,8 @@
 import AppKit
 import CryptoKit
 import DownloadKit
+import FileKit
 import Foundation
-import Security
 
 /// Forever: Blizzard's WoW Forever client against a TrinityCore server with bots (Karrz1's
 /// forever-bots) on the home server (`server/Forever`).
@@ -615,31 +615,17 @@ enum ForeverClient {
     }
 }
 
-/// The Forever accounts' passwords, for Play's login: in the login Keychain, one item per email.
+/// The Forever accounts' passwords, for Play's login: in the login Keychain, one item per email,
+/// upper-cased as the server keeps it.
 enum ForeverKeychain {
-    private static let service = "Hearthside Forever"
+    private static let keychain = Keychain(service: "Hearthside Forever")
 
-    private static func query(_ email: String) -> [String: Any] {
-        [kSecClass as String: kSecClassGenericPassword,
-         kSecAttrService as String: service,
-         kSecAttrAccount as String: email.uppercased()]
-    }
-
+    /// A failed save shows up at Play, which asks for the password again.
     static func save(_ password: String, for email: String) {
-        SecItemDelete(query(email) as CFDictionary)
-        var item = query(email)
-        item[kSecValueData as String] = Data(password.utf8)
-        SecItemAdd(item as CFDictionary, nil)
+        try? keychain.set(password, for: email.uppercased())
     }
 
-    static func password(for email: String) -> String? {
-        var q = query(email)
-        q[kSecReturnData as String] = true
-        q[kSecMatchLimit as String] = kSecMatchLimitOne
-        var out: CFTypeRef?
-        guard SecItemCopyMatching(q as CFDictionary, &out) == errSecSuccess, let data = out as? Data else { return nil }
-        return String(data: data, encoding: .utf8)
-    }
+    static func password(for email: String) -> String? { keychain.string(for: email.uppercased()) }
 
-    static func has(_ email: String) -> Bool { password(for: email) != nil }
+    static func has(_ email: String) -> Bool { keychain.contains(email.uppercased()) }
 }
